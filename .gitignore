@@ -1,0 +1,28 @@
+# Build and compile artifacts
+build/
+devel/
+install/
+
+# Log files
+*.log
+
+# Compiled executables and libraries
+*.exe
+*.so
+*.o
+
+# ROS workspace files
+/.catkin_workspace
+
+# IDE-specific files (add more if you use a specific IDE)
+.vscode/
+.idea/
+
+# Temporary files and directories
+*.swp
+*.swo
+tmp/
+
+# Sensitive or personal information
+config.ini
+credentials.txt
