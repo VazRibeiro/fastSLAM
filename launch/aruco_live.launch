@@ -1,9 +1,10 @@
-<!-- Run the aruco_detect node -->
 <launch>
-  <!-- namespace for camera input -->
-  <arg name="camera" default="/raspicam_node"/>
-  <arg name="image" default="image"/>
+
+  <arg name="camera" default="/camera/rgb"/>
+  <arg name="image" default="image_color"/>
   <arg name="transport" default="compressed"/>
+  
+  <!-- Aruco markers configurations-->
   <arg name="fiducial_len" default="0.20"/>
   <arg name="dictionary" default="0"/>
   <arg name="do_pose_estimation" default="true"/>
@@ -19,8 +20,7 @@
     <param name="do_pose_estimation" value="$(arg do_pose_estimation)"/>
     <param name="ignore_fiducials" value="$(arg ignore_fiducials)"/>
     <param name="fiducial_len_override" value="$(arg fiducial_len_override)"/>
-    <remap from="/camera/compressed" 
-        to="$(arg camera)/$(arg image)/$(arg transport)"/>
+    <remap from="/camera/compressed" to="$(arg camera)/$(arg image)/$(arg transport)"/>
     <remap from="/camera_info" to="$(arg camera)/camera_info"/>
   </node>
 </launch>
