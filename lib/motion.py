@@ -8,27 +8,31 @@ Velocity motion model for 2D differential drive robot:
 Author: João Penetra
 Email: joao.penetra@tecnico.ulisboa.pt
 '''
-
+import math
 import numpy as np
+import tf.transformations as tf
 import matplotlib.pyplot as plt
-import signal
-import sys
+
 import rospy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from functools import partial
 
-
-# Global variables to store the previous velocity time and poses 
+# Global variables to store the previous velocity time and poses estimated through velocity commands
 previous_velocity_time = None
-est_pose_x = [] # Estimated through velocity commands
+est_pose_x = [] 
 est_pose_y = []
 
-first_time_called = False
-first_pose_x = None
-first_pose_y = None
-pose_x = [] # Taken from robot Odometry
-pose_y = [] 
+# Global variables needed to "center" our estimation to the robots reference point
+first_time_called_pose = False
+first_time_called_est = False
+first_pose_x = 0
+first_pose_y = 0
+first_pose_theta = 0
+
+# Global variables needed to store previous x and y coordinates directly from the robot odometry
+pose_x = []
+pose_y = []  
 
 class Particle():
     def __init__(self, x, y, theta):
@@ -80,16 +84,28 @@ class MotionModel():
         Input:
             pose: robot's estimate of its position and orientation
         '''
-        global first_time_called, first_pose_x, first_pose_y
+        global first_time_called_pose, first_pose_x, first_pose_y, first_pose_theta
 
-        if not first_time_called:
+        if not first_time_called_pose:
             # Run the code only the first time the function is called
+            first_time_called_pose = True
             first_pose_x = pose.pose.pose.position.x
             first_pose_y = pose.pose.pose.position.y
-            first_time_called = True
+            euler_angles = tf.euler_from_quaternion([pose.pose.pose.orientation.x,
+                                     pose.pose.pose.orientation.y,
+                                     pose.pose.pose.orientation.z,
+                                     pose.pose.pose.orientation.w])
 
-        pose_x.append(pose.pose.pose.position.x - first_pose_x)
-        pose_y.append(pose.pose.pose.position.y - first_pose_y)
+            first_pose_theta = euler_angles[2] # Extract the yaw angle (orientation around z-axis)
+
+            # Limit θ within [-pi, pi]
+            #if (first_pose_theta > np.pi):
+            #    first_pose_theta -= 2 * np.pi
+            #elif (first_pose_theta < -np.pi):
+            #    first_pose_theta += 2 * np.pi
+
+        pose_x.append(pose.pose.pose.position.x)
+        pose_y.append(pose.pose.pose.position.y)
 
 
     def initialize_timer_2(self):
@@ -135,22 +151,6 @@ class MotionModel():
         self.sample_motion_model(particle,self.control)
 
 
-
-    def initialize_particle(self, particle):
-        '''
-        Add motion noise to the robot state in the given particle object.
-
-        Input:
-            particle: Particle() object which has been initialized by first
-                      ground truth data.
-        Output:
-            None.
-        '''
-        # Apply Gaussian noise to the robot state
-        particle.x += np.random.normal(0, self.motion_noise[0])
-        particle.y += np.random.normal(0, self.motion_noise[1])
-        particle.theta += np.random.normal(0, self.motion_noise[2])
-
     def motion_update(self, particle, control):
         '''
         Conduct motion update for a given particle from current state X_t-1 and
@@ -171,23 +171,35 @@ class MotionModel():
         Output:
             None.
         '''
+        global first_time_called_pose, first_time_called_est, first_pose_x, first_pose_y, first_pose_theta
+
         control = self.control
         delta_t = control[0] # Alterado para 1/30 neste momento
 
-        # Compute updated [timestamp, x, y, theta]
-        particle.x += control[2] * np.cos(particle.theta) * 1/30.0
-        particle.y += control[2] * np.sin(particle.theta) * 1/30.0
-        particle.theta += control[3] * 1/30.0
+        if first_time_called_pose and not first_time_called_est:
+            particle.x += first_pose_x
+            particle.y += first_pose_y
+            particle.theta += first_pose_theta
+            first_time_called_est = True
+            print(first_pose_theta)
+            print(first_pose_x)
+            print(first_pose_y)
 
-        # Limit θ within [-pi, pi]
-        if (particle.theta > np.pi):
-            particle.theta -= 2 * np.pi
-        elif (particle.theta < -np.pi):
-            particle.theta += 2 * np.pi
+        if first_time_called_est:
+            # Compute updated [timestamp, x, y, theta]
+            particle.x += control[2] * np.cos(particle.theta) * 1/30.0
+            particle.y += control[2] * np.sin(particle.theta) * 1/30.0
+            particle.theta += control[3] * 1/30.0
 
-        # print(particle.x)
-        est_pose_x.append(particle.x)
-        est_pose_y.append(particle.y)
+            # Limit θ within [-pi, pi]
+            if (particle.theta > np.pi):
+                particle.theta -= 2 * np.pi
+            elif (particle.theta < -np.pi):
+                particle.theta += 2 * np.pi
+
+            # print(particle.x)
+            est_pose_x.append(particle.x)
+            est_pose_y.append(particle.y)
 
 
 
@@ -205,13 +217,13 @@ class MotionModel():
             None.
         '''
         control = self.control
-        print('control[2] = '+ str(control[2]))
+        #print('control[2] = '+ str(control[2]))
 
         # Apply Gaussian noise to control input
         v = np.random.normal(control[2], self.motion_noise[3])
-        print('v = '+ str(v))
+        #print('v = '+ str(v))
         w = np.random.normal(control[3], self.motion_noise[4])
-        print('w = '+ str(w))
+        #print('w = '+ str(w))
         
         control_noisy = np.array([control[0], control[1], v, w])
 
@@ -224,15 +236,8 @@ if __name__ == '__main__':
     rospy.init_node('motion_model_node')
 
     # Create an instance of the MotionModel class with motion noise values
-    #motion_noise = [0.01, 0.01, 0.01, 0.01, 0.01]  # Example motion noise values
-    motion_noise = [0, 0, 0, 0, 0]  # Example motion noise values
+    motion_noise = [0.01, 0.01, 0.01, 0.01, 0.01]  # Example motion noise values
+    #motion_noise = [0, 0, 0, 0, 0]  # Example motion noise values
     motion_model = MotionModel(motion_noise)
 
-    # Spin the ROS node to receive pose messages and trigger the callback
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        # Handle Ctrl+C manually if rospy.spin() is interrupted
-        print("Termination signal received.")
-        rospy.signal_shutdown("Termination signal received.")
-        sys.exit(0)
+    rospy.spin()
