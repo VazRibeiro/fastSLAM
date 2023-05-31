@@ -21,12 +21,6 @@ class FastSlamNode:
         self.sub_fake_sensor_topic = None
         self.pub_demo_topic = None
         
-        # Create the bayes filter object here
-        #self.bayes_filter = BayesFilter()
-
-        # Store the data received from a fake sensor
-        self.fake_sensor = 0.0
-        
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
         rospy.loginfo_once('FastSlam node has started')
@@ -50,6 +44,7 @@ class FastSlamNode:
         self.node_frequency = rospy.get_param('node_frequency', 30)
         rospy.loginfo('Node Frequency: %s', self.node_frequency)
 
+
     def initialize_subscribers(self):
         """
         Initialize the subscribers to the topics. You should subscribe to
@@ -59,6 +54,7 @@ class FastSlamNode:
         # Subscribe to the topic '/fake_sensor_topic'
         self.sub_fake_sensor_topic = rospy.Subscriber('/fake_sensor_topic', Float64, self.callback_fake_sensor_topic)
 
+
     def initialize_publishers(self):
         """
         You should/can initialize the publishers for the results of your algorithm here.
@@ -67,12 +63,14 @@ class FastSlamNode:
         # Initialize the publisher to the topic '/output_topic'
         self.pub_demo_topic = rospy.Publisher('/output_topic', Odometry, queue_size=10)
 
+
     def initialize_timer(self):
         """
         Here we create a timer to trigger the callback function at a fixed rate.
         """
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.node_frequency), self.timer_callback)
         self.h_timerActivate = True
+
 
     def timer_callback(self, timer):
         """Here you should invoke methods to perform the logic computations of your algorithm.
@@ -102,6 +100,7 @@ class FastSlamNode:
         # Publish the data received to the topic '/output_topic'
         self.pub_demo_topic.publish(msg)
 
+
     def callback_fake_sensor_topic(self, msg):
         """
         Callback function for the subscriber of the topic '/demo_topic'. This function is called
@@ -119,7 +118,7 @@ class FastSlamNode:
 
 def main():
 
-    # Create an instance of the DemoNode class
+    # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
 
     # Spin to keep the script for exiting
