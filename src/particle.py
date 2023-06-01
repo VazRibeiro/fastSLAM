@@ -3,13 +3,21 @@
 import numpy as np
 
 class Particle:
-    def __init__(self, pose, weight):
+    def __init__(self,timestamp,pose,N_particles):
+        self.initialize(timestamp,pose,N_particles)
+    
+    def initialize(self,timestamp,pose,N_particles):
         self.pose = pose  # Pose of the particle (x, y, theta)
-        self.weight = weight  # Weight associated with the particle
-        self.mean = np.zeros((1, 2))
-        self.cov = np.zeros((1, 2, 2))
-        self.occurrences = np.full(1,False) # Estimates observed by the particle
-        self.landmark_id = np.zeros((1, 1))
+        self.timestamp = timestamp
+        self.x = pose[0]
+        self.y = pose[1]
+        self.theta = pose[2]
+        self.weight = 1.0 / N_particles  # Weight associated with the particle
+        self.mean = np.zeros((0, 2))
+        self.cov = np.zeros((0, 2, 2))
+        self.landmark_ids = []
+        #b=np.append(b,[[[21,0],[0,21]]],0)
+
 
     def motion_update(self, delta_pose):
         # Perform motion update for the particle based on the given delta pose
