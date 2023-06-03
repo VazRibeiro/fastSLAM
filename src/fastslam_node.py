@@ -17,8 +17,8 @@ class FastSlamNode:
         self.vel_sub = None
         self.pub_pioneer_pose = None
         #flags
-        self.odometry_flag = False
         self.camera_flag = False
+        self.control = [0, 0]
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -74,10 +74,9 @@ class FastSlamNode:
         """
         Perform repeating tasks.
         """
-        if self.odometry_flag:
-            self.odometry_flag = False
-            self.fastslam_algorithm.odometry_update(self.control)
-
+        # Update particle position
+        self.fastslam_algorithm.odometry_update([time.time()]+self.control)
+        # Update 
         if self.camera_flag:
             self.camera_flag  = False
 
@@ -104,9 +103,9 @@ class FastSlamNode:
         '''
         self.odometry_flag = True
         # Extract linear and angular velocities from the current velocity message
-        u = cmd_vel.linear.x
+        v = cmd_vel.linear.x
         w = cmd_vel.angular.z
-        self.control = [time.time(),u,w]
+        self.control = [v,w]
 
 
 def main():

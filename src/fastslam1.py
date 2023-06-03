@@ -13,7 +13,8 @@ class FastSLAM1():
 
     def __init__(self):
         # Initialize Motion Model object
-        motion_noise = np.array([0.1, 0.15])
+        # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
+        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         self.motion_model = MotionModel(motion_noise)
 
         # Initialize Measurement Model object
@@ -46,7 +47,10 @@ class FastSLAM1():
         Input:  - control: control input U_t. [timestamp u, w]
         '''
         for particle in self.particles:
-            self.motion_model.sample_motion_model(particle, control)
+            x_t=self.motion_model.sample_motion_model_velocity(particle, control)
+            particle.x = x_t[0]
+            particle.y = x_t[1]
+            particle.theta = x_t[2]
 
 
     def camera_update(self, measurement):

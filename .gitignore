@@ -26,3 +26,6 @@ tmp/
 # Sensitive or personal information
 config.ini
 credentials.txt
+
+# python cache
+*.pyc
