@@ -3,70 +3,57 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+import time
 from particle import Particle
+from motion_model import MotionModel
+from measurement_model import MeasurementModel
 
 
 class FastSLAM1():
-    def __init__(self, motion_model, measurement_model):
-        pass
 
-    def initialization(self, N_particles):
-        '''
-        Initialize robots state, landmark state and all particles.
+    def __init__(self):
+        # Initialize Motion Model object
+        motion_noise = np.array([0.1, 0.15])
+        self.motion_model = MotionModel(motion_noise)
 
-        Input:
-            N_particles: number of particles this SLAM algorithms tracks.
-        Output:
-            None.
-        '''
-        # Number of particles and landmarks
-        self.N_particles = N_particles
-        self.N_landmarks = len(self.landmark_indexes)
+        # Initialize Measurement Model object
+        Q = np.diagflat(np.array([0.05, 0.02])) ** 2
+        self.measurement_model = MeasurementModel(Q)
+        
+        # Initialize Time
+        self.initial_timestamp = time.time()
+        # Initial Pose [ x, y, zAxis_rotation]
+        initial_pose  = [0,0,0]
+        # Array of N particles
+        self.N_particles = 100
+        # Initial position variance
+        initial_variance = np.array([0,0,0])
 
-        # Robot states: [timestamp, x, y, theta]
-        # First state is obtained from ground truth
-        self.states = np.array([self.groundtruth_data[0]])
-
-        # Landmark states: [x, y]
-        self.landmark_states = np.zeros((self.N_landmarks, 2))
-
-        # Table to record if each landmark has been seen or not
-        # [0] - [14] represent for landmark# 6 - 20
-        self.landmark_observed = np.full(self.N_landmarks, False)
-
-        # Initial particles
         self.particles = []
-        for i in range(N_particles):
-            particle = Particle()
-            particle.initialization(self.states[0], self.N_particles,
-                                    self.N_landmarks)
-            self.motion_model.initialize_particle(particle)
+        for i in range(self.N_particles):
+            # Initialize the particle
+            particle=Particle(self.initial_timestamp,initial_pose,self.N_particles)
+            # Apply Gaussian noise to initial position of the particles
+            particle.x = np.random.normal(particle.x, initial_variance[0])
+            particle.y = np.random.normal(particle.y, initial_variance[1])
+            particle.theta = np.random.normal(particle.theta, initial_variance[2])
             self.particles.append(particle)
 
 
-    def robot_update(self, control):
+    def odometry_update(self, control):
         '''
         Update robot pose through sampling motion model for all particles.
-
-        Input:
-            control: control input U_t.
-                     [timestamp, -1, v_t, w_t]
-        Output:
-            None.
+        Input:  - control: control input U_t. [timestamp u, w]
         '''
         for particle in self.particles:
             self.motion_model.sample_motion_model(particle, control)
 
-    def landmark_update(self, measurement):
+
+    def camera_update(self, measurement):
         '''
         Update landmark mean and covariance for all landmarks of all particles.
         Based on EKF method.
-
-        Input:
-            measurement: measurement data Z_t.
-                         [timestamp, #landmark, range, bearing]
-        Output:
-            None.
+        Input:  - measurement: measurement data Z_t. [timestamp, #landmark, range, bearing]
         '''
         # Return if the measured object is not a landmark (another robot)
         if not measurement[1] in self.landmark_indexes:
@@ -85,7 +72,7 @@ class FastSLAM1():
             # Update landmark by EKF if it has been observed before
             else:
                 self.measurement_model.\
-                    landmark_update(particle, measurement, landmark_idx)
+                    camera_update(particle, measurement, landmark_idx)
 
         # Normalize all weights
         self.weights_normalization()
@@ -93,14 +80,10 @@ class FastSLAM1():
         # Resample all particles according to the weights
         self.importance_sampling()
 
+
     def weights_normalization(self):
         '''
         Normalize weight in all particles so that the sum = 1.
-
-        Input:
-            None.
-        Output:
-            None.
         '''
         # Compute sum of the weights
         sum = 0.0
@@ -116,14 +99,10 @@ class FastSLAM1():
         for particle in self.particles:
             particle.weight /= sum
 
+
     def importance_sampling(self):
         '''
         Resample all particles through the importance factors.
-
-        Input:
-            None.
-        Output:
-            None.
         '''
         # Construct weights vector
         weights = []
@@ -141,15 +120,11 @@ class FastSLAM1():
             new_particles.append(copy.deepcopy(self.particles[index]))
         self.particles = new_particles
 
+
     def state_update(self):
         '''
         Update the robot and landmark states by taking average among all
         particles.
-
-        Input:
-            None.
-        Output:
-            None.
         '''
         # Robot state
         timestamp = self.particles[0].timestamp
@@ -188,25 +163,23 @@ class FastSLAM1():
 
         self.landmark_states = landmark_states
 
-    def plot_data(self):
-        '''
-        Plot all data through matplotlib.
-        Conduct animation as the algorithm runs.
 
-        Input:
-            None.
-        Output:
-            None.
-        '''
-        # Clear all
-        plt.cla()
+    def get_predicted_position(self):
+        timestamp = self.particles[0].timestamp
+        x = 0.0
+        y = 0.0
+        theta = 0.0
 
+        for particle in self.particles:
+            x += particle.x
+            y += particle.y
+            theta += particle.theta
 
-        plt.title('Fast SLAM 1.0 with known correspondences')
-        plt.legend()
-        plt.xlim((-2.0, 5.5))
-        plt.ylim((-7.0, 7.0))
-        plt.pause(1e-16)
+        x /= self.N_particles
+        y /= self.N_particles
+        theta /= self.N_particles
+
+        return np.array([timestamp,x,y,theta])
 
 
 if __name__ == "__main__":
