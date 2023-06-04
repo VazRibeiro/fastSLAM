@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import rospy
-import cProfile
 import tf.transformations as tf
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
@@ -21,6 +20,7 @@ class FastSlamNode:
         self.pub_pioneer_pose = None
         #flags
         self.camera_flag = False
+        self.main_loop_counter = 0
         self.control = [0, 0]
         
         # Initialize the ROS node
@@ -115,11 +115,8 @@ class FastSlamNode:
         """
         Perform repeating tasks.
         """
-        # Create a new profiler
         time1 = time.time()
-        profiler = cProfile.Profile()
-        # Start profiling
-        profiler.enable()
+        self.main_loop_counter+=1
         
         # Update particle position
         self.fastslam_algorithm.odometry_update([time.time()]+self.control)
@@ -130,11 +127,10 @@ class FastSlamNode:
 
         #Publish results
         self.publish_pioneer_pose()
-        self.fastslam_algorithm.plot_data()
+        if ((self.main_loop_counter) % 5 == 0):
+            self.fastslam_algorithm.plot_data()
+            self.main_loop_counter = 0
 
-        # Stop profiling and print
-        profiler.disable()
-        profiler.print_stats()
         time2 = time.time()
         print(time2-time1)
     ################################################################################

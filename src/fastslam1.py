@@ -190,9 +190,9 @@ class FastSLAM1():
         #plt.plot(self.states[:, 1], self.states[:, 2],
          #        'r', label="Robot State Estimate")
 
-        # Create a condition that selects all entries
-        condition = np.ones(len(self.particles[1]), dtype=bool)
-        plt.scatter(self.particles[condition].x, self.particles[condition].y,
+        x_values = [particle.x for particle in self.particles]
+        y_values = [particle.y for particle in self.particles]
+        plt.scatter(x_values, y_values,
                     s=5, c='k', alpha=0.5, label="Particles")
 
         plt.title('Fast SLAM 1.0 with known correspondences')
