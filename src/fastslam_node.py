@@ -8,6 +8,7 @@ from geometry_msgs.msg import Twist
 from fiducial_msgs.msg import FiducialTransformArray
 import time
 from fastslam1 import FastSLAM1
+import matplotlib.pyplot as plt
 
 
 class FastSlamNode:
@@ -96,7 +97,6 @@ class FastSlamNode:
     def vel_callback(self, cmd_vel):
         '''
         Callback function for the command velocity topic subscriber.
-        Input:  - cmd_vel: Velocity message received from the topic.
         '''
         # Extract linear and angular velocities from the current velocity message
         v = cmd_vel.linear.x
@@ -115,8 +115,8 @@ class FastSlamNode:
         """
         Perform repeating tasks.
         """
-        time1 = time.time()
         # Create a new profiler
+        time1 = time.time()
         profiler = cProfile.Profile()
         # Start profiling
         profiler.enable()
@@ -130,7 +130,9 @@ class FastSlamNode:
 
         #Publish results
         self.publish_pioneer_pose()
-        # Stop profiling
+        self.fastslam_algorithm.plot_data()
+
+        # Stop profiling and print
         profiler.disable()
         profiler.print_stats()
         time2 = time.time()
@@ -141,7 +143,7 @@ class FastSlamNode:
 def main():
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
-    
+    plt.show()
     # Spin to keep the script for exiting
     rospy.spin()
 

@@ -177,6 +177,29 @@ class FastSLAM1():
         theta /= self.N_particles
 
         return np.array([timestamp,x,y,theta])
+    
+    def plot_data(self):
+        '''
+        Plot all data through matplotlib.
+        Conduct animation as the algorithm runs.
+        '''
+        # Clear all
+        plt.cla()
+
+        # States
+        #plt.plot(self.states[:, 1], self.states[:, 2],
+         #        'r', label="Robot State Estimate")
+
+        # Create a condition that selects all entries
+        condition = np.ones(len(self.particles[1]), dtype=bool)
+        plt.scatter(self.particles[condition].x, self.particles[condition].y,
+                    s=5, c='k', alpha=0.5, label="Particles")
+
+        plt.title('Fast SLAM 1.0 with known correspondences')
+        plt.legend()
+        plt.xlim((-2.0, 5.5))
+        plt.ylim((-7.0, 7.0))
+        plt.pause(1e-16)
 
 
 if __name__ == "__main__":
