@@ -40,7 +40,7 @@ class FastSlamNode:
         self.initialize_timer()
         
         # Create a profiler object
-        self.profiler = cProfile.Profile()
+        #self.profiler = cProfile.Profile()
 
 
     def load_parameters(self):
@@ -116,8 +116,10 @@ class FastSlamNode:
         Perform repeating tasks.
         """
         time1 = time.time()
+        # Create a new profiler
+        profiler = cProfile.Profile()
         # Start profiling
-        self.profiler.enable()
+        profiler.enable()
         
         # Update particle position
         self.fastslam_algorithm.odometry_update([time.time()]+self.control)
@@ -129,8 +131,8 @@ class FastSlamNode:
         #Publish results
         self.publish_pioneer_pose()
         # Stop profiling
-        self.profiler.disable()
-        self.profiler.print_stats()
+        profiler.disable()
+        profiler.print_stats()
         time2 = time.time()
         print(time2-time1)
     ################################################################################
