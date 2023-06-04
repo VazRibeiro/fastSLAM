@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import rospy
+import cProfile
 import tf.transformations as tf
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from fiducial_msgs.msg import FiducialTransformArray
 import time
 from fastslam1 import FastSLAM1
 
@@ -11,10 +13,10 @@ from fastslam1 import FastSLAM1
 class FastSlamNode:
 
     def __init__(self):
-
         # Initialize some necessary variables here
         self.node_frequency = None
         self.vel_sub = None
+        self.fid_sub = None
         self.pub_pioneer_pose = None
         #flags
         self.camera_flag = False
@@ -36,6 +38,9 @@ class FastSlamNode:
         
         # Initialize the timer with the corresponding interruption to work at a constant rate
         self.initialize_timer()
+        
+        # Create a profiler object
+        self.profiler = cProfile.Profile()
 
 
     def load_parameters(self):
@@ -52,6 +57,7 @@ class FastSlamNode:
         Initialize the subscribers. 
         """
         self.vel_sub = rospy.Subscriber('/cmd_vel', Twist, self.vel_callback)
+        self.fid_sub = rospy.Subscriber('/fiducial_transforms', FiducialTransformArray, self.fid_callback)
         #self.pose_sub = rospy.Subscriber('/pose', Odometry, self.pose_callback)
 
 
@@ -70,17 +76,7 @@ class FastSlamNode:
         self.h_timerActivate = True
 
 
-    def timer_callback(self, timer):
-        """
-        Perform repeating tasks.
-        """
-        # Update particle position
-        self.fastslam_algorithm.odometry_update([time.time()]+self.control)
-        # Update 
-        if self.camera_flag:
-            self.camera_flag  = False
-
-        #Publish results
+    def publish_pioneer_pose(self):
         predicted_position = self.fastslam_algorithm.get_predicted_position()
         orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
         msg = Odometry()
@@ -96,23 +92,54 @@ class FastSlamNode:
         self.pub_pioneer_pose.publish(msg)
 
 
+    # Odometry callback
     def vel_callback(self, cmd_vel):
         '''
         Callback function for the command velocity topic subscriber.
         Input:  - cmd_vel: Velocity message received from the topic.
         '''
-        self.odometry_flag = True
         # Extract linear and angular velocities from the current velocity message
         v = cmd_vel.linear.x
         w = cmd_vel.angular.z
         self.control = [v,w]
 
+    # Aruco markers callback
+    def fid_callback(self, fiducial_transforms):
+        #print(len(fiducial_transforms.transforms))
+        self.camera_flag = True
+
+
+    ################################################################################
+    # Main repeating algorithm
+    def timer_callback(self, timer):
+        """
+        Perform repeating tasks.
+        """
+        time1 = time.time()
+        # Start profiling
+        self.profiler.enable()
+        
+        # Update particle position
+        self.fastslam_algorithm.odometry_update([time.time()]+self.control)
+        
+        # Update landmark information
+        if self.camera_flag:
+            self.camera_flag  = False
+
+        #Publish results
+        self.publish_pioneer_pose()
+        # Stop profiling
+        self.profiler.disable()
+        self.profiler.print_stats()
+        time2 = time.time()
+        print(time2-time1)
+    ################################################################################
+
 
 def main():
-
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
-
+    
     # Spin to keep the script for exiting
     rospy.spin()
 

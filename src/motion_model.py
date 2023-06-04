@@ -11,6 +11,7 @@ class MotionModel():
         self.parameters = motion_noise
 
 
+    # Algorithm for sampling poses from Probabilistic Robotics chapter 5, page 124
     def sample_motion_model_velocity(self, particle, control):
         '''
         Sample next state X_t from current state X_t-1 and control U_t with
@@ -26,13 +27,14 @@ class MotionModel():
         v_est = control[1] + self.sample(self.parameters[0]*control[1]**2 + self.parameters[1]*control[2]**2)
         w_est = control[2] + self.sample(self.parameters[2]*control[1]**2 + self.parameters[3]*control[2]**2)
         gamma_est = self.sample(self.parameters[4]*control[1]**2 + self.parameters[5]*control[2]**2)
-        x = particle.x - (v_est/w_est)*np.sin(particle.theta) + (v_est/w_est)*np.sin(particle.theta + w_est*delta_t)
-        y = particle.y + (v_est/w_est)*np.cos(particle.theta) - (v_est/w_est)*np.cos(particle.theta + w_est*delta_t)
+        vw_ratio = v_est/w_est
+        x = particle.x - (vw_ratio)*np.sin(particle.theta) + (vw_ratio)*np.sin(particle.theta + w_est*delta_t)
+        y = particle.y + (vw_ratio)*np.cos(particle.theta) - (vw_ratio)*np.cos(particle.theta + w_est*delta_t)
         theta = particle.theta + w_est*delta_t + gamma_est*delta_t
-        print(self.sample(self.parameters[0]*control[1]**2))
+        #print(self.sample(self.parameters[0]*control[1]**2))
         return [x,y,theta]
 
-
+    # Algorithm to sample from a normal distribution from Probabilistic Robotics chapter 5, page 124
     def sample(self,b):
         summatory = 0
         for _ in range(12):

@@ -10,7 +10,6 @@ from measurement_model import MeasurementModel
 
 
 class FastSLAM1():
-
     def __init__(self):
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
@@ -41,13 +40,11 @@ class FastSLAM1():
             self.particles.append(particle)
 
 
+    # Update the estimation of the robot position using the previous position and
+    # the control action [timestamp v, w]
     def odometry_update(self, control):
-        '''
-        Update robot pose through sampling motion model for all particles.
-        Input:  - control: control input U_t. [timestamp u, w]
-        '''
         for particle in self.particles:
-            x_t=self.motion_model.sample_motion_model_velocity(particle, control)
+            x_t = self.motion_model.sample_motion_model_velocity(particle, control)
             particle.x = x_t[0]
             particle.y = x_t[1]
             particle.theta = x_t[2]
@@ -59,10 +56,6 @@ class FastSLAM1():
         Based on EKF method.
         Input:  - measurement: measurement data Z_t. [timestamp, #landmark, range, bearing]
         '''
-        # Return if the measured object is not a landmark (another robot)
-        if not measurement[1] in self.landmark_indexes:
-            return
-
         for particle in self.particles:
             # Get landmark index
             landmark_idx = self.landmark_indexes[measurement[1]]
