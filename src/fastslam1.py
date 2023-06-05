@@ -10,16 +10,15 @@ from measurement_model import MeasurementModel
 
 
 class FastSLAM1():
+
     def __init__(self):
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
         motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         self.motion_model = MotionModel(motion_noise)
-
         # Initialize Measurement Model object
         Q = np.diagflat(np.array([0.05, 0.02])) ** 2
         self.measurement_model = MeasurementModel(Q)
-        
         # Initialize Time
         self.initial_timestamp = time.time()
         # Initial Pose [ x, y, zAxis_rotation]
@@ -28,7 +27,7 @@ class FastSLAM1():
         self.N_particles = 100
         # Initial position variance
         initial_variance = np.array([0,0,0])
-
+        # Create particles
         self.particles = []
         for i in range(self.N_particles):
             # Initialize the particle
@@ -38,6 +37,8 @@ class FastSLAM1():
             particle.y = np.random.normal(particle.y, initial_variance[1])
             particle.theta = np.random.normal(particle.theta, initial_variance[2])
             self.particles.append(particle)
+        # Initialize the array to keep the average position
+        self.predicted_position = np.array([[0,0]])
 
 
     # Update the estimation of the robot position using the previous position and
@@ -161,21 +162,23 @@ class FastSLAM1():
         self.landmark_states = landmark_states
 
 
+    # Calculate the average position of the particles
     def get_predicted_position(self):
         timestamp = self.particles[0].timestamp
         x = 0.0
         y = 0.0
         theta = 0.0
-
         for particle in self.particles:
             x += particle.x
             y += particle.y
             theta += particle.theta
-
         x /= self.N_particles
         y /= self.N_particles
         theta /= self.N_particles
-
+        # If the position changed enough, save the new estimate
+        if np.linalg.norm(self.predicted_position[-1] - [x,y]) > 0.1:
+            print(self.predicted_position)
+            self.predicted_position = np.append(self.predicted_position, [[x,y]], axis=0)
         return np.array([timestamp,x,y,theta])
     
     def plot_data(self):
@@ -185,20 +188,19 @@ class FastSLAM1():
         '''
         # Clear all
         plt.cla()
-
-        # States
-        #plt.plot(self.states[:, 1], self.states[:, 2],
-         #        'r', label="Robot State Estimate")
-
+        # Plot Robot State Estimate (average position)
+        plt.plot(self.predicted_position[:, 0], self.predicted_position[:, 1],
+                 'r', label="Robot State Estimate")
+        # Plot particles
         x_values = [particle.x for particle in self.particles]
         y_values = [particle.y for particle in self.particles]
         plt.scatter(x_values, y_values,
                     s=5, c='k', alpha=0.5, label="Particles")
-
+        # Plot configurations
         plt.title('Fast SLAM 1.0 with known correspondences')
         plt.legend()
-        plt.xlim((-2.0, 5.5))
-        plt.ylim((-7.0, 7.0))
+        plt.xlim((-10.0, 10))
+        plt.ylim((-10.0, 10.0))
         plt.pause(1e-16)
 
 

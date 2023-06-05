@@ -105,7 +105,6 @@ class FastSlamNode:
 
     # Aruco markers callback
     def fid_callback(self, fiducial_transforms):
-        #print(len(fiducial_transforms.transforms))
         self.camera_flag = True
 
 
@@ -127,7 +126,7 @@ class FastSlamNode:
 
         #Publish results
         self.publish_pioneer_pose()
-        if ((self.main_loop_counter) % 5 == 0):
+        if ((self.main_loop_counter) % 10 == 0):
             self.fastslam_algorithm.plot_data()
             self.main_loop_counter = 0
 
