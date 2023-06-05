@@ -22,6 +22,7 @@ class FastSlamNode:
         self.camera_flag = False
         self.main_loop_counter = 0
         self.control = [0, 0]
+        self.past_time = 0
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -132,6 +133,8 @@ class FastSlamNode:
 
         time2 = time.time()
         print(time2-time1)
+        print(time1-self.past_time)
+        self.past_time = time1
     ################################################################################
 
 

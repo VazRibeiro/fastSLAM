@@ -177,7 +177,6 @@ class FastSLAM1():
         theta /= self.N_particles
         # If the position changed enough, save the new estimate
         if np.linalg.norm(self.predicted_position[-1] - [x,y]) > 0.1:
-            print(self.predicted_position)
             self.predicted_position = np.append(self.predicted_position, [[x,y]], axis=0)
         return np.array([timestamp,x,y,theta])
     
