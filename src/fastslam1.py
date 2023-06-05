@@ -180,27 +180,14 @@ class FastSLAM1():
             self.predicted_position = np.append(self.predicted_position, [[x,y]], axis=0)
         return np.array([timestamp,x,y,theta])
     
-    def plot_data(self):
+    def get_plot_data(self):
         '''
         Plot all data through matplotlib.
         Conduct animation as the algorithm runs.
         '''
-        # Clear all
-        plt.cla()
-        # Plot Robot State Estimate (average position)
-        plt.plot(self.predicted_position[:, 0], self.predicted_position[:, 1],
-                 'r', label="Robot State Estimate")
-        # Plot particles
         x_values = [particle.x for particle in self.particles]
         y_values = [particle.y for particle in self.particles]
-        plt.scatter(x_values, y_values,
-                    s=5, c='k', alpha=0.5, label="Particles")
-        # Plot configurations
-        plt.title('Fast SLAM 1.0 with known correspondences')
-        plt.legend()
-        plt.xlim((-10.0, 10))
-        plt.ylim((-10.0, 10.0))
-        plt.pause(1e-16)
+        return self.predicted_position, x_values, y_values
 
 
 if __name__ == "__main__":

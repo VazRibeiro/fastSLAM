@@ -8,6 +8,7 @@ from fiducial_msgs.msg import FiducialTransformArray
 import time
 from fastslam1 import FastSLAM1
 import matplotlib.pyplot as plt
+import multiprocessing as mp
 
 
 class FastSlamNode:
@@ -41,8 +42,11 @@ class FastSlamNode:
         # Initialize the timer with the corresponding interruption to work at a constant rate
         self.initialize_timer()
         
-        # Create a profiler object
-        #self.profiler = cProfile.Profile()
+        # Initialize the data queue
+        self.data_queue = mp.Queue()
+        # Create a separate process for plotting
+        self.plot_process = mp.Process(target=self.plot_data_process,args=(self.data_queue,))
+        self.plot_process.start()
 
 
     def load_parameters(self):
@@ -109,6 +113,37 @@ class FastSlamNode:
         self.camera_flag = True
 
 
+    def plot_data_process(self,data_queue):
+        """
+        Entry point for the separate process responsible for plotting.
+        """
+        while True:
+            data = data_queue.get()  # Get data from the queue
+
+            if data['terminate_flag']:
+                break
+
+            if data['data']:
+                predicted_position, x_values, y_values = data['data']
+
+                # Process and plot the data here
+                # Clear all
+                plt.cla()
+                # Plot Robot State Estimate (average position)
+                plt.plot(predicted_position[:, 0], predicted_position[:, 1],
+                        'r', label="Robot State Estimate")
+                # Plot particles
+                plt.scatter(x_values, y_values,
+                            s=5, c='k', alpha=0.5, label="Particles")
+                # Plot configurations
+                plt.title('Fast SLAM 1.0 with known correspondences')
+                plt.legend()
+                plt.pause(1e-16)
+                #plt.show()
+
+        # Terminate the plot process when the loop breaks
+        plt.close()
+
     ################################################################################
     # Main repeating algorithm
     def timer_callback(self, timer):
@@ -125,15 +160,21 @@ class FastSlamNode:
         if self.camera_flag:
             self.camera_flag  = False
 
-        #Publish results
+        # Publish results
         self.publish_pioneer_pose()
-        if ((self.main_loop_counter) % 10 == 0):
-            self.fastslam_algorithm.plot_data()
+        # Plot results
+        if ((self.main_loop_counter) % 2 == 0):
+            # Put the data and termination flag into the queue
+            data = {
+            'data': self.fastslam_algorithm.get_plot_data(),
+            'terminate_flag': False
+            }
+            self.data_queue.put(data)
             self.main_loop_counter = 0
 
         time2 = time.time()
         print(time2-time1)
-        print(time1-self.past_time)
+        #print(time1-self.past_time)
         self.past_time = time1
     ################################################################################
 
@@ -141,9 +182,15 @@ class FastSlamNode:
 def main():
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
-    plt.show()
-    # Spin to keep the script for exiting
+
     rospy.spin()
+    # Terminate the plot process when the main script exits
+    data = {
+        'data': (),
+        'terminate_flag': True
+    }
+    fastslam_node.data_queue.put(data)
+    fastslam_node.plot_process.terminate()
 
 
 if __name__ == '__main__':
