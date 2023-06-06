@@ -18,6 +18,7 @@ class MeasurementModel():
                Dimension: [2, 2].
         '''
         self.Q = Q
+        
 
     def compute_expected_measurement(self, particle, landmark_idx):
         '''

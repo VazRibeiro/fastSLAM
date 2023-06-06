@@ -14,7 +14,7 @@ class Particle:
         self.weight = 1.0 / N_particles  # Weight associated with the particle
         self.mean = np.zeros((0, 2))
         self.cov = np.zeros((0, 2, 2))
-        self.landmark_ids = []
+        self.landmark_info = np.zeros((0, 8))
         #b=np.append(b,[[[21,0],[0,21]]],0)
 
 

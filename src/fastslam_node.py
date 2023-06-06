@@ -23,6 +23,7 @@ class FastSlamNode:
         self.camera_flag = False
         self.main_loop_counter = 0
         self.control = [0, 0]
+        self.measurements = FiducialTransformArray()
         self.past_time = 0
         
         # Initialize the ROS node
@@ -37,7 +38,7 @@ class FastSlamNode:
         self.initialize_publishers()
 
         # Initialize Algorithm
-        self.fastslam_algorithm = FastSLAM1()
+        self.fastslam = FastSLAM1()
         
         # Initialize the timer with the corresponding interruption to work at a constant rate
         self.initialize_timer()
@@ -83,7 +84,7 @@ class FastSlamNode:
 
 
     def publish_pioneer_pose(self):
-        predicted_position = self.fastslam_algorithm.get_predicted_position()
+        predicted_position = self.fastslam.get_predicted_position()
         orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
         msg = Odometry()
         msg.header.stamp = rospy.Time.from_sec(predicted_position[0])
@@ -111,6 +112,7 @@ class FastSlamNode:
     # Aruco markers callback
     def fid_callback(self, fiducial_transforms):
         self.camera_flag = True
+        self.measurements = fiducial_transforms
 
 
     def plot_data_process(self,data_queue):
@@ -154,11 +156,12 @@ class FastSlamNode:
         self.main_loop_counter+=1
         
         # Update particle position
-        self.fastslam_algorithm.odometry_update([time.time()]+self.control)
+        self.fastslam.odometry_update([time.time()]+self.control)
         
         # Update landmark information
         if self.camera_flag:
             self.camera_flag  = False
+            self.fastslam.landmarks_update(self.measurements)
 
         # Publish results
         self.publish_pioneer_pose()
@@ -166,7 +169,7 @@ class FastSlamNode:
         if ((self.main_loop_counter) % 2 == 0):
             # Put the data and termination flag into the queue
             data = {
-            'data': self.fastslam_algorithm.get_plot_data(),
+            'data': self.fastslam.get_plot_data(),
             'terminate_flag': False
             }
             self.data_queue.put(data)

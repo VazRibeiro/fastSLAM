@@ -12,6 +12,9 @@ from measurement_model import MeasurementModel
 class FastSLAM1():
 
     def __init__(self):
+        '''
+        Initialize models, particles and array of predicted positions
+        '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
         motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
@@ -41,9 +44,11 @@ class FastSLAM1():
         self.predicted_position = np.array([[0,0]])
 
 
-    # Update the estimation of the robot position using the previous position and
-    # the control action [timestamp v, w]
     def odometry_update(self, control):
+        '''
+        Update the estimation of the robot position using the previous position and
+        the control action [timestamp v, w]
+        '''
         for particle in self.particles:
             x_t = self.motion_model.sample_motion_model_velocity(particle, control)
             particle.x = x_t[0]
@@ -51,32 +56,49 @@ class FastSLAM1():
             particle.theta = x_t[2]
 
 
-    def camera_update(self, measurement):
+    def landmarks_update(self,measurement):
         '''
         Update landmark mean and covariance for all landmarks of all particles.
         Based on EKF method.
         Input:  - measurement: measurement data Z_t. [timestamp, #landmark, range, bearing]
         '''
+        # for particle in self.particles:
+        #     # Get landmark index
+        #     landmark_idx = self.landmark_indexes[measurement[1]]
+
+        #     # Initialize landmark by measurement if it is newly observed
+        #     if not particle.lm_ob[landmark_idx]:
+        #         self.measurement_model.\
+        #             initialize_landmark(particle, measurement,
+        #                                 landmark_idx, 1.0/self.N_landmarks)
+
+        #     # Update landmark by EKF if it has been observed before
+        #     else:
+        #         self.measurement_model.\
+        #             camera_update(particle, measurement, landmark_idx)
+
+        # # Normalize all weights
+        # self.weights_normalization()
+
+        # # Resample all particles according to the weights
+        # self.importance_sampling()
+        if len(measurement.transforms) == 0:
+            #print("No aruco markers...")
+            return
+        measured_ids = [transform.fiducial_id for transform in measurement.transforms]
         for particle in self.particles:
-            # Get landmark index
-            landmark_idx = self.landmark_indexes[measurement[1]]
-
-            # Initialize landmark by measurement if it is newly observed
-            if not particle.lm_ob[landmark_idx]:
-                self.measurement_model.\
-                    initialize_landmark(particle, measurement,
-                                        landmark_idx, 1.0/self.N_landmarks)
-
-            # Update landmark by EKF if it has been observed before
-            else:
-                self.measurement_model.\
-                    camera_update(particle, measurement, landmark_idx)
-
-        # Normalize all weights
-        self.weights_normalization()
-
-        # Resample all particles according to the weights
-        self.importance_sampling()
+            for transform in measurement.transforms:
+                if ~np.any(np.isin(particle.landmark_info[:,0],transform.fiducial_id)):
+                    particle.landmark_info = np.append(particle.landmark_info,[\
+                        [transform.fiducial_id,
+                        transform.transform.translation.x,
+                        transform.transform.translation.y,
+                        transform.transform.translation.z,
+                        transform.transform.rotation.x,
+                        transform.transform.rotation.y,
+                        transform.transform.rotation.z,
+                        transform.transform.rotation.w]],0)
+                    print(particle.landmark_info)
 
 
     def weights_normalization(self):
@@ -124,23 +146,6 @@ class FastSLAM1():
         Update the robot and landmark states by taking average among all
         particles.
         '''
-        # Robot state
-        timestamp = self.particles[0].timestamp
-        x = 0.0
-        y = 0.0
-        theta = 0.0
-
-        for particle in self.particles:
-            x += particle.x
-            y += particle.y
-            theta += particle.theta
-
-        x /= self.N_particles
-        y /= self.N_particles
-        theta /= self.N_particles
-
-        self.states = np.append(self.states,
-                                np.array([[timestamp, x, y, theta]]), axis=0)
 
         # Landmark state
         landmark_states = np.zeros((self.N_landmarks, 2))
@@ -162,8 +167,10 @@ class FastSLAM1():
         self.landmark_states = landmark_states
 
 
-    # Calculate the average position of the particles
     def get_predicted_position(self):
+        '''
+        Calculate the average position of the particles
+        '''
         timestamp = self.particles[0].timestamp
         x = 0.0
         y = 0.0
@@ -180,10 +187,10 @@ class FastSLAM1():
             self.predicted_position = np.append(self.predicted_position, [[x,y]], axis=0)
         return np.array([timestamp,x,y,theta])
     
+
     def get_plot_data(self):
         '''
-        Plot all data through matplotlib.
-        Conduct animation as the algorithm runs.
+        Get data to pass to the plotting process
         '''
         x_values = [particle.x for particle in self.particles]
         y_values = [particle.y for particle in self.particles]
