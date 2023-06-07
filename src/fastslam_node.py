@@ -63,7 +63,7 @@ class FastSlamNode:
         Load the parameters from the configuration server (ROS)
         """
         # Node frequency of operation
-        self.node_frequency = rospy.get_param('node_frequency', 30)
+        self.node_frequency = rospy.get_param('node_frequency', 45)
         rospy.loginfo('Node Frequency: %s', self.node_frequency)
 
 

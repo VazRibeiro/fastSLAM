@@ -7,6 +7,7 @@ Wolfram Burgard (Author) and Dieter Fox (Author).
 
 import numpy as np
 import tf.transformations as tf
+from scipy.spatial.transform import Rotation
 import copy
 import time
 from particle import Particle
@@ -75,13 +76,30 @@ class FastSLAM1():
             # Quaternion to euler angles
             euler_angles = tf.euler_from_quaternion(
                 [transform.transform.rotation.x,
-                 transform.transform.rotation.y,
-                 transform.transform.rotation.z,
-                 transform.transform.rotation.w])
+                transform.transform.rotation.y,
+                transform.transform.rotation.z,
+                transform.transform.rotation.w])
+            rotation = Rotation.from_euler('xyz',euler_angles,degrees=False)
+            position = np.array([
+                transform.transform.translation.x,
+                transform.transform.translation.y,
+                transform.transform.translation.z])
+            # Invert the rotation matrix
+            inverse_rotation = rotation.inv()
+            # Invert the position vector
+            transformed_position = -inverse_rotation.apply(position)
+            print(transformed_position)
+            # filtered_measurement = np.array(
+            #     [transformed_position[0],
+            #      transformed_position[1],
+            #      euler_angles[2]])
+            x = transform.transform.translation.z
+            y = transform.transform.translation.x
+            bearing = np.arctan2(-y,x)
             filtered_measurement = np.array(
-                [transform.transform.translation.x,
-                 transform.transform.translation.y,
-                 euler_angles[2]])
+                [x,
+                 y,
+                 bearing])
             # Check if it's a new landmark
             if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
                 # If it's a new landmark, add it
