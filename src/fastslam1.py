@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
+'''
+FastSlam 1 with Known Correspondences implementation.
+See page 450 from Probablistic Robotics by Sebastian Thrun (Author),
+Wolfram Burgard (Author) and Dieter Fox (Author).
+'''
 
 import numpy as np
-import matplotlib.pyplot as plt
+import tf.transformations as tf
 import copy
 import time
 from particle import Particle
@@ -20,7 +25,7 @@ class FastSLAM1():
         motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.diagflat(np.array([0.05, 0.02])) ** 2
+        Q = np.diagflat(np.array([0.1, 0.1])) ** 2
         self.measurement_model = MeasurementModel(Q)
         # Initialize Time
         self.initial_timestamp = time.time()
@@ -41,7 +46,8 @@ class FastSLAM1():
             particle.theta = np.random.normal(particle.theta, initial_variance[2])
             self.particles.append(particle)
         # Initialize the array to keep the average position
-        self.predicted_position = np.array([[0,0]])
+        self.predicted_position = np.array([[0,0,0]])
+        self.measured_ids = np.zeros((0,1))
 
 
     def odometry_update(self, control):
@@ -56,12 +62,42 @@ class FastSLAM1():
             particle.theta = x_t[2]
 
 
-    def landmarks_update(self,measurement):
+    def landmarks_update(self,measurements):
         '''
         Update landmark mean and covariance for all landmarks of all particles.
-        Based on EKF method.
-        Input:  - measurement: measurement data Z_t. [timestamp, #landmark, range, bearing]
         '''
+        # Check if measurements are empty
+        if len(measurements.transforms) == 0:
+            #print("No aruco markers...")
+            return
+        # Loop all the measurements in the fiducial transform array
+        for transform in measurements.transforms:
+            # Quaternion to euler angles
+            euler_angles = tf.euler_from_quaternion(
+                [transform.transform.rotation.x,
+                 transform.transform.rotation.y,
+                 transform.transform.rotation.z,
+                 transform.transform.rotation.w])
+            filtered_measurement = np.array(
+                [transform.transform.translation.x,
+                 transform.transform.translation.y,
+                 euler_angles[2]])
+            # Check if it's a new landmark
+            if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
+                # If it's a new landmark, add it
+                self.measured_ids = np.append(self.measured_ids,[[transform.fiducial_id]],0)
+                for particle in self.particles:
+                    index = len(self.measured_ids)-1
+                    # Initialize mean and covariance for this landmark
+                    self.measurement_model.initialize_landmark(
+                        particle,
+                        filtered_measurement,
+                        index)
+            else:
+                for particle in self.particles:
+                    index = np.where(self.measured_ids == transform.fiducial_id)[0]
+                    return
+                
         # for particle in self.particles:
         #     # Get landmark index
         #     landmark_idx = self.landmark_indexes[measurement[1]]
@@ -82,23 +118,6 @@ class FastSLAM1():
 
         # # Resample all particles according to the weights
         # self.importance_sampling()
-        if len(measurement.transforms) == 0:
-            #print("No aruco markers...")
-            return
-        measured_ids = [transform.fiducial_id for transform in measurement.transforms]
-        for particle in self.particles:
-            for transform in measurement.transforms:
-                if ~np.any(np.isin(particle.landmark_info[:,0],transform.fiducial_id)):
-                    particle.landmark_info = np.append(particle.landmark_info,[\
-                        [transform.fiducial_id,
-                        transform.transform.translation.x,
-                        transform.transform.translation.y,
-                        transform.transform.translation.z,
-                        transform.transform.rotation.x,
-                        transform.transform.rotation.y,
-                        transform.transform.rotation.z,
-                        transform.transform.rotation.w]],0)
-                    print(particle.landmark_info)
 
 
     def weights_normalization(self):
@@ -141,32 +160,6 @@ class FastSLAM1():
         self.particles = new_particles
 
 
-    def state_update(self):
-        '''
-        Update the robot and landmark states by taking average among all
-        particles.
-        '''
-
-        # Landmark state
-        landmark_states = np.zeros((self.N_landmarks, 2))
-        count = np.zeros(self.N_landmarks)
-        self.landmark_observed = np.full(self.N_landmarks, False)
-
-        for particle in self.particles:
-            for landmark_idx in range(self.N_landmarks):
-                if particle.lm_ob[landmark_idx]:
-                    landmark_states[landmark_idx] +=\
-                        particle.lm_mean[landmark_idx]
-                    count[landmark_idx] += 1
-                    self.landmark_observed[landmark_idx] = True
-
-        for landmark_idx in range(self.N_landmarks):
-            if self.landmark_observed[landmark_idx]:
-                landmark_states[landmark_idx] /= count[landmark_idx]
-
-        self.landmark_states = landmark_states
-
-
     def get_predicted_position(self):
         '''
         Calculate the average position of the particles
@@ -183,8 +176,8 @@ class FastSLAM1():
         y /= self.N_particles
         theta /= self.N_particles
         # If the position changed enough, save the new estimate
-        if np.linalg.norm(self.predicted_position[-1] - [x,y]) > 0.1:
-            self.predicted_position = np.append(self.predicted_position, [[x,y]], axis=0)
+        if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1 or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
+            self.predicted_position = np.append(self.predicted_position, [[x,y,theta]], axis=0)
         return np.array([timestamp,x,y,theta])
     
 
@@ -192,9 +185,12 @@ class FastSLAM1():
         '''
         Get data to pass to the plotting process
         '''
-        x_values = [particle.x for particle in self.particles]
-        y_values = [particle.y for particle in self.particles]
-        return self.predicted_position, x_values, y_values
+        x = [particle.x for particle in self.particles]
+        y = [particle.y for particle in self.particles]
+        ids = self.measured_ids
+        mean = [particle.mean for particle in self.particles]
+        cov = [particle.cov for particle in self.particles]
+        return self.predicted_position, x, y, ids, mean, cov
 
 
 if __name__ == "__main__":

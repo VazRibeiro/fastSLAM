@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 '''
-Measurement model for 2D Range Sensor ([range, bearing]).
-
-Author: Chenge Yang
-Email: chengeyang2019@u.northwestern.edu
+Measurement model for Aruco Markers.
 '''
 
 import numpy as np
@@ -18,22 +14,49 @@ class MeasurementModel():
                Dimension: [2, 2].
         '''
         self.Q = Q
-        
+
+
+    def initialize_landmark(self, particle, measurement,index):
+        '''
+        Initialize landmark mean and covariance a landmark for given particle.
+        Note: particles are already initialized with the default weight
+        '''
+        # Calculate position estimate of the landmark in the world referential
+        range = np.sqrt(measurement[0]**2 + measurement[1]**2)
+        x = particle.x + range * np.cos(measurement[2] + particle.theta)
+        y = particle.y + range * np.sin(measurement[2] + particle.theta)
+        # Initialize mean
+        particle.mean = np.append(particle.mean,[[x,y]],0)
+        # Initialize landmark Jacobian
+        H_m = self.compute_landmark_jacobian(particle,index)
+        # Initialize landmark covariance
+        H_inverse = np.linalg.inv(H_m)
+        particle.cov = H_inverse.dot(self.Q).dot(H_inverse.T)
+
+
+    def compute_landmark_jacobian(self, particle,index):
+        '''
+        Computing the landmark Jacobian.
+        Jacobian is given by the derivative: d h(x_t, x_l) / d (x_l)
+        H_m =  delta_x/√q  delta_y/√q
+               -delta_y/q  delta_x/q
+        '''
+        delta_x = particle.mean[index,0] - particle.x
+        delta_y = particle.mean[index,1] - particle.y
+        q = delta_x**2 + delta_y**2
+        H_1 = np.array([delta_x/np.sqrt(q), delta_y/np.sqrt(q)])
+        H_2 = np.array([-delta_y/q, delta_x/q])
+        H_m = np.array([H_1, H_2])
+        return H_m
+    
 
     def compute_expected_measurement(self, particle, landmark_idx):
         '''
         Compute the expected range and bearing given current robot state and
         landmark state.
-
         Measurement model: (expected measurement)
         range   =  sqrt((x_l - x_t)^2 + (y_l - y_t)^2)
         bearing  =  atan2((y_l - y_t) / (x_l - x_t)) - θ_t
-
-        Input:
-            particle: Particle() object to be updated.
-            landmark_idx: the index of the landmark (0 ~ 15).
-        Output:
-            range, bearing: the expected measurement.
         '''
         delta_x = particle.lm_mean[landmark_idx, 0] - particle.x
         delta_y = particle.lm_mean[landmark_idx, 1] - particle.y
@@ -44,90 +67,6 @@ class MeasurementModel():
 
         return range, bearing
 
-    def compute_expected_landmark_state(self, particle, measurement):
-        '''
-        Compute the expected landmark location [x, y] given current robot state
-        and measurement data.
-
-        Expected landmark state: inverse of the measurement model.
-        x_l = x_t + range_t * cos(bearing_t + theta_t)
-        y_l = y_t + range_t * sin(bearing_t + theta_t)
-
-        Input:
-            particle: Particle() object to be updated.
-            measurement: measurement data Z_t.
-                         [timestamp, #landmark, range, bearing]
-        Output:
-            x, y: expected landmark state [x, y]
-        '''
-        x = particle.x + measurement[2] *\
-            np.cos(measurement[3] + particle.theta)
-        y = particle.y + measurement[2] *\
-            np.sin(measurement[3] + particle.theta)
-
-        return x, y
-
-    def compute_landmark_jacobian(self, particle, landmark_idx):
-        '''
-        Computing the Jacobian wrt landmark state X_l.
-
-        Jacobian of measurement: only take derivatives of landmark X_l.
-                                 H = d h(x_t, x_l) / d (x_l)
-        H_m =  delta_x/√q  delta_y/√q
-               -delta_y/q  delta_x/q
-
-        Input:
-            particle: Particle() object to be updated.
-            landmark_idx: the index of the landmark (0 ~ 15).
-        Output:
-            H_m: Jacobian h'(X_t, X_l)
-                 Dimension: [2, 2]
-        '''
-        delta_x = particle.lm_mean[landmark_idx, 0] - particle.x
-        delta_y = particle.lm_mean[landmark_idx, 1] - particle.y
-        q = delta_x ** 2 + delta_y ** 2
-
-        H_1 = np.array([delta_x/np.sqrt(q), delta_y/np.sqrt(q)])
-        H_2 = np.array([-delta_y/q, delta_x/q])
-        H_m = np.array([H_1, H_2])
-
-        return H_m
-
-    def initialize_landmark(self, particle, measurement, landmark_idx, weight):
-        '''
-        Initialize landmark mean and covariance for one landmark of a given
-        particle.
-        This landmark is the first time to be observed.
-        Based on EKF method.
-
-        Input:
-            particle: Particle() object to be updated.
-            measurement: measurement data Z_t.
-                         [timestamp, #landmark, range, bearing]
-            landmark_idx: the index of the landmark (0 ~ 15).
-            weight: the default importance factor for a new feature.
-        Output:
-            None.
-        '''
-        # Update landmark mean by inverse measurement model
-        particle.lm_mean[landmark_idx] =\
-            self.compute_expected_landmark_state(particle, measurement)
-
-        # Get Jacobian wrt landmark state
-        H_m = self.compute_landmark_jacobian(particle, landmark_idx)
-
-        # Update landmark covariance
-        H_inverse = np.linalg.inv(H_m)
-        particle.lm_cov[landmark_idx] = H_inverse.dot(self.Q).dot(H_inverse.T)
-
-        # Mark landmark as observed
-        particle.lm_ob[landmark_idx] = True
-
-        # Assign default importance weight
-        particle.weight = weight
-
-        # Update timestamp
-        particle.timestamp = measurement[0]
 
     def landmark_update(self, particle, measurement, landmark_idx):
         '''
@@ -206,6 +145,7 @@ class MeasurementModel():
                    dot(difference))[0, 0]
 
         return likelihood
+    
 
 
 if __name__ == '__main__':

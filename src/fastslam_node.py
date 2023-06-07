@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
+'''
+Implements and runs the FastSlam1 ROS node which interfaces the 
+ROS configurations, subscribers and publishers with the FastSlam1
+with Known Correspondences algorithm. Runs a second process to 
+plot the results.
+'''
 
 import rospy
 import tf.transformations as tf
+import numpy as np
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from fiducial_msgs.msg import FiducialTransformArray
 import time
 from fastslam1 import FastSLAM1
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import multiprocessing as mp
 
 
@@ -83,8 +91,7 @@ class FastSlamNode:
         self.h_timerActivate = True
 
 
-    def publish_pioneer_pose(self):
-        predicted_position = self.fastslam.get_predicted_position()
+    def publish_pioneer_pose(self,predicted_position):
         orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
         msg = Odometry()
         msg.header.stamp = rospy.Time.from_sec(predicted_position[0])
@@ -121,28 +128,53 @@ class FastSlamNode:
         """
         while True:
             data = data_queue.get()  # Get data from the queue
-
             if data['terminate_flag']:
                 break
-
             if data['data']:
-                predicted_position, x_values, y_values = data['data']
-
-                # Process and plot the data here
+                predicted_position, x, y, ids, mean, cov = data['data']
                 # Clear all
                 plt.cla()
+                
                 # Plot Robot State Estimate (average position)
                 plt.plot(predicted_position[:, 0], predicted_position[:, 1],
                         'r', label="Robot State Estimate")
+                
                 # Plot particles
-                plt.scatter(x_values, y_values,
-                            s=5, c='k', alpha=0.5, label="Particles")
+                plt.scatter(x, y, s=5, c='k', alpha=0.5, label="Particles")
+
+                # Plot mean points and covariance ellipses
+                for i in range(len(mean[0])):
+                    if i>0:
+                        # Plot mean point
+                        plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
+                        # Plot covariance ellipse
+                        eigenvalues, eigenvectors = np.linalg.eig(cov[i])
+                        angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+                        ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
+                        plt.gca().add_patch(ellipse)
+
+                        # Add ID as text near the mean point
+                        plt.text(mean[0][i, 0], mean[0][i, 1], str(ids[i]), fontsize=8, ha='left', va='center')
+
+                # Plot arrows based on theta
+                arrow_length = 0.4  # Length of arrows
+                dx = arrow_length * np.cos(predicted_position[-1,2])  # Arrow x-component
+                dy = arrow_length * np.sin(predicted_position[-1,2])  # Arrow y-component
+                plt.quiver(
+                    predicted_position[-1,0],
+                    predicted_position[-1,1],
+                    dx, 
+                    dy, 
+                    angles='xy', 
+                    scale_units='xy', 
+                    scale=1, 
+                    color='g', 
+                    width=0.005)
+                
                 # Plot configurations
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
                 plt.pause(1e-16)
-                #plt.show()
-
         # Terminate the plot process when the loop breaks
         plt.close()
 
@@ -162,11 +194,15 @@ class FastSlamNode:
         if self.camera_flag:
             self.camera_flag  = False
             self.fastslam.landmarks_update(self.measurements)
+        
+        # Get average position of the particles
+        predicted_position = self.fastslam.get_predicted_position()
 
         # Publish results
-        self.publish_pioneer_pose()
+        self.publish_pioneer_pose(predicted_position)
+
         # Plot results
-        if ((self.main_loop_counter) % 2 == 0):
+        if ((self.main_loop_counter) % 4 == 0):
             # Put the data and termination flag into the queue
             data = {
             'data': self.fastslam.get_plot_data(),
@@ -176,9 +212,7 @@ class FastSlamNode:
             self.main_loop_counter = 0
 
         time2 = time.time()
-        print(time2-time1)
-        #print(time1-self.past_time)
-        self.past_time = time1
+        #print(time2-time1)
     ################################################################################
 
 
