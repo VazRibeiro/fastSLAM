@@ -49,6 +49,7 @@ class FastSLAM1():
         # Initialize the array to keep the average position
         self.predicted_position = np.array([[0,0,0]])
         self.measured_ids = np.zeros((0,1))
+        self.accepted_landmarks = [33, 32]
 
 
     def odometry_update(self, control):
@@ -73,35 +74,14 @@ class FastSLAM1():
             return
         # Loop all the measurements in the fiducial transform array
         for transform in measurements.transforms:
-            # Quaternion to euler angles
-            euler_angles = tf.euler_from_quaternion(
-                [transform.transform.rotation.x,
-                transform.transform.rotation.y,
-                transform.transform.rotation.z,
-                transform.transform.rotation.w])
-            rotation = Rotation.from_euler('xyz',euler_angles,degrees=False)
-            position = np.array([
-                transform.transform.translation.x,
-                transform.transform.translation.y,
-                transform.transform.translation.z])
-            # Invert the rotation matrix
-            inverse_rotation = rotation.inv()
-            # Invert the position vector
-            transformed_position = -inverse_rotation.apply(position)
-            print(transformed_position)
-            # filtered_measurement = np.array(
-            #     [transformed_position[0],
-            #      transformed_position[1],
-            #      euler_angles[2]])
             x = transform.transform.translation.z
             y = transform.transform.translation.x
             bearing = np.arctan2(-y,x)
-            filtered_measurement = np.array(
-                [x,
-                 y,
-                 bearing])
+            range = np.sqrt(x**2 + y**2)
+            filtered_measurement = np.array([range,bearing,x,y])
             # Check if it's a new landmark
-            if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
+            if  (transform.fiducial_id not in self.measured_ids) and\
+                (transform.fiducial_id in self.accepted_landmarks):
                 # If it's a new landmark, add it
                 self.measured_ids = np.append(self.measured_ids,[[transform.fiducial_id]],0)
                 for particle in self.particles:
@@ -111,10 +91,15 @@ class FastSLAM1():
                         particle,
                         filtered_measurement,
                         index)
-            else:
+            elif transform.fiducial_id in self.accepted_landmarks:
                 for particle in self.particles:
-                    index = np.where(self.measured_ids == transform.fiducial_id)[0]
-                    return
+                    #print(self.measured_ids)
+                    index = np.where(self.measured_ids == transform.fiducial_id)[0][0]
+                    self.measurement_model.landmark_update(
+                        particle,
+                        filtered_measurement,
+                        index
+                    )
                 
         # for particle in self.particles:
         #     # Get landmark index

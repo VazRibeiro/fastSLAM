@@ -144,17 +144,16 @@ class FastSlamNode:
 
                 # Plot mean points and covariance ellipses
                 for i in range(len(mean[0])):
-                    if i>0:
-                        # Plot mean point
-                        plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
-                        # Plot covariance ellipse
-                        eigenvalues, eigenvectors = np.linalg.eig(cov[i])
-                        angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
-                        ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
-                        plt.gca().add_patch(ellipse)
+                    # Plot mean point
+                    plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
+                    # Plot covariance ellipse
+                    eigenvalues, eigenvectors = np.linalg.eig(cov[i])
+                    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+                    ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
+                    plt.gca().add_patch(ellipse)
 
-                        # Add ID as text near the mean point
-                        plt.text(mean[0][i, 0], mean[0][i, 1], str(ids[i]), fontsize=8, ha='left', va='center')
+                    # Add ID as text near the mean point
+                    plt.text(mean[0][i, 0], mean[0][i, 1], str(ids[i]), fontsize=8, ha='left', va='center')
 
                 # Plot arrows based on theta
                 arrow_length = 0.4  # Length of arrows
