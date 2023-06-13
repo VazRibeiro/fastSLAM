@@ -32,7 +32,8 @@ class MeasurementModel():
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
         # Initialize landmark covariance
         H_inverse = np.linalg.inv(H_m)
-        particle.cov = H_inverse.dot(self.Q).dot(H_inverse.T)
+        cov_matrix = H_inverse.dot(self.Q).dot(H_inverse.T)
+        particle.cov = np.append(particle.cov,[cov_matrix],0)
 
 
     def compute_expected_measurement(self,particle,index):
@@ -42,6 +43,7 @@ class MeasurementModel():
         '''
         dx = particle.mean[index, 0] - particle.x
         dy = particle.mean[index, 1] - particle.y
+        #print([index,dx,dy],particle.mean,particle.x,particle.y)
         q = dx ** 2 + dy ** 2
         return dx,dy,q
 
@@ -68,19 +70,20 @@ class MeasurementModel():
         dx,dy,q =self.compute_expected_measurement(particle,index)
         # Get Jacobian wrt landmark state
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
-        print('H_m')
-        print(H_m)
-        print('cov')
-        print(particle.cov[index])
-        
-        # Compute Kalman gain
+        # Compute measurement covariance
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
-        print('Q')
-        print(Q)
+        #print('Determinante:' + str(np.linalg.det(Q))+'  ,'+str(Q))
+        # Compute Kalman gain
         K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
-        #K = particle.cov[index].dot(H_m.T).dot(Q)
-        print('K gain')
-        print(K)
+        # if abs(np.linalg.det(Q)) > 0.0001:
+        #     K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
+        # else:
+        #     return
+        #     # Regularization parameter (small positive value)
+        #     regularization_param = 0.01
+        #     # Apply regularization by adding small values to diagonal elements
+        #     Q = Q + np.eye(Q.shape[0])*regularization_param
+        #     K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
 
         # Update mean
         difference = np.array([[measurement[2] - dx],
@@ -91,9 +94,11 @@ class MeasurementModel():
         particle.cov[index]=(np.identity(2)-K.dot(H_m)).dot(particle.cov[index])
 
         # Importance factor
-        particle.weight =   np.linalg.det(2 * np.pi * Q) ** (-0.5) *\
+        particle.weight =   abs(np.linalg.det(2 * np.pi * Q)) ** (-0.5) *\
                             np.exp(-0.5 * difference.T.dot(np.linalg.inv(Q)).
                             dot(difference))[0,0]
+
+
 
 
     def compute_correspondence(self, particle, measurement, index):

@@ -23,10 +23,10 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        motion_noise = np.array([0.00, 0.002, 0.00, 0.002, 0.002, 0.002])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.diagflat(np.array([0.1, 0.1])) ** 2
+        Q = np.diagflat(np.array([0.001, 0.001]))
         self.measurement_model = MeasurementModel(Q)
         # Initialize Time
         self.initial_timestamp = time.time()
@@ -78,10 +78,11 @@ class FastSLAM1():
             y = transform.transform.translation.x
             bearing = np.arctan2(-y,x)
             range = np.sqrt(x**2 + y**2)
-            filtered_measurement = np.array([range,bearing,x,y])
+            filtered_measurement = np.array([range,bearing,x,-y])
             # Check if it's a new landmark
-            if  (transform.fiducial_id not in self.measured_ids) and\
-                (transform.fiducial_id in self.accepted_landmarks):
+            if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
+            # if  (transform.fiducial_id not in self.measured_ids) and\
+            #     (transform.fiducial_id in self.accepted_landmarks):
                 # If it's a new landmark, add it
                 self.measured_ids = np.append(self.measured_ids,[[transform.fiducial_id]],0)
                 for particle in self.particles:
@@ -91,7 +92,8 @@ class FastSLAM1():
                         particle,
                         filtered_measurement,
                         index)
-            elif transform.fiducial_id in self.accepted_landmarks:
+            else:
+            # elif transform.fiducial_id in self.accepted_landmarks:
                 for particle in self.particles:
                     #print(self.measured_ids)
                     index = np.where(self.measured_ids == transform.fiducial_id)[0][0]

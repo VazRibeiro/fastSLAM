@@ -147,7 +147,7 @@ class FastSlamNode:
                     # Plot mean point
                     plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
                     # Plot covariance ellipse
-                    eigenvalues, eigenvectors = np.linalg.eig(cov[i])
+                    eigenvalues, eigenvectors = np.linalg.eig(cov[0][i])
                     angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
                     ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
                     plt.gca().add_patch(ellipse)
