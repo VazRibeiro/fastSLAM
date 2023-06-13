@@ -100,27 +100,12 @@ class FastSLAM1():
                         filtered_measurement,
                         index
                     )
-                
-        # for particle in self.particles:
-        #     # Get landmark index
-        #     landmark_idx = self.landmark_indexes[measurement[1]]
 
-        #     # Initialize landmark by measurement if it is newly observed
-        #     if not particle.lm_ob[landmark_idx]:
-        #         self.measurement_model.\
-        #             initialize_landmark(particle, measurement,
-        #                                 landmark_idx, 1.0/self.N_landmarks)
+        # Normalize all weights
+        self.weights_normalization()
 
-        #     # Update landmark by EKF if it has been observed before
-        #     else:
-        #         self.measurement_model.\
-        #             camera_update(particle, measurement, landmark_idx)
-
-        # # Normalize all weights
-        # self.weights_normalization()
-
-        # # Resample all particles according to the weights
-        # self.importance_sampling()
+        # Resample all particles according to the weights
+        self.importance_sampling()
 
 
     def weights_normalization(self):

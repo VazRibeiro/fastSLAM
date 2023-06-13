@@ -68,9 +68,19 @@ class MeasurementModel():
         dx,dy,q =self.compute_expected_measurement(particle,index)
         # Get Jacobian wrt landmark state
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
+        print('H_m')
+        print(H_m)
+        print('cov')
+        print(particle.cov[index])
+        
         # Compute Kalman gain
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
+        print('Q')
+        print(Q)
         K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
+        #K = particle.cov[index].dot(H_m.T).dot(Q)
+        print('K gain')
+        print(K)
 
         # Update mean
         difference = np.array([[measurement[2] - dx],
