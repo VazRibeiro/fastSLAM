@@ -52,17 +52,27 @@ class FastSLAM1():
         self.accepted_landmarks = [33, 32]
 
 
-    def odometry_update(self, control):
+    def odometry_update(self, control, odom_first):
         '''
         Update the estimation of the robot position using the previous position and
         the control action [timestamp v, w]
         '''
-        for particle in self.particles:
-            x_t = self.motion_model.sample_motion_model_velocity(particle, control)
-            particle.x = x_t[0]
-            particle.y = x_t[1]
-            particle.theta = x_t[2]
+        if odom_first[0] == -1:
+            return
 
+        for particle in self.particles:
+            if odom_first[0] == 0:
+                x_t = self.motion_model.sample_motion_model_velocity(particle, control)
+                particle.x = odom_first[1]
+                particle.y = odom_first[2]
+                particle.theta = odom_first[3]
+                odom_first[0] = 1
+            elif odom_first[0] > 0:
+                x_t = self.motion_model.sample_motion_model_velocity(particle, control)
+                particle.x = x_t[0]
+                particle.y = x_t[1]
+                particle.theta = x_t[2]
+                
 
     def landmarks_update(self,measurements):
         '''
@@ -78,7 +88,7 @@ class FastSLAM1():
             y = transform.transform.translation.x
             bearing = np.arctan2(-y,x)
             range = np.sqrt(x**2 + y**2)
-            filtered_measurement = np.array([range,bearing,x,-y])
+            filtered_measurement = np.array([range,bearing,x*0.75,-y])
             # Check if it's a new landmark
             if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
             # if  (transform.fiducial_id not in self.measured_ids) and\
@@ -98,9 +108,9 @@ class FastSLAM1():
                     #print(self.measured_ids)
                     index = np.where(self.measured_ids == transform.fiducial_id)[0][0]
                     self.measurement_model.landmark_update(
-                        particle,
-                        filtered_measurement,
-                        index
+                       particle,
+                       filtered_measurement,
+                       index
                     )
 
         # Normalize all weights
@@ -150,7 +160,7 @@ class FastSLAM1():
         self.particles = new_particles
 
 
-    def get_predicted_position(self):
+    def get_predicted_position(self, odom_first):
         '''
         Calculate the average position of the particles
         '''
@@ -165,11 +175,16 @@ class FastSLAM1():
         x /= self.N_particles
         y /= self.N_particles
         theta /= self.N_particles
+
         # If the position changed enough, save the new estimate
         if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1 or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
             self.predicted_position = np.append(self.predicted_position, [[x,y,theta]], axis=0)
-        return np.array([timestamp,x,y,theta])
-    
+
+        # if odom_first[0] == 1:
+        #     self.predicted_position = np.array([[0,0,0]])
+        #     odom_first[0] += 1
+
+        return np.array([timestamp,x,y,theta])    
 
     def get_plot_data(self):
         '''

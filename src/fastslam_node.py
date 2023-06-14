@@ -33,6 +33,9 @@ class FastSlamNode:
         self.control = [0, 0]
         self.measurements = FiducialTransformArray()
         self.past_time = 0
+        self.odom_flag = False
+        self.odom_first = [-1, -1, -1, -1]
+        self.poses = np.array([[0,0,0]])
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -73,7 +76,7 @@ class FastSlamNode:
         """
         self.vel_sub = rospy.Subscriber('/cmd_vel', Twist, self.vel_callback)
         self.fid_sub = rospy.Subscriber('/fiducial_transforms', FiducialTransformArray, self.fid_callback)
-        #self.pose_sub = rospy.Subscriber('/pose', Odometry, self.pose_callback)
+        self.pose_sub = rospy.Subscriber('/pose', Odometry, self.pose_callback)
 
 
     def initialize_publishers(self):
@@ -89,7 +92,6 @@ class FastSlamNode:
         """
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.node_frequency), self.timer_callback)
         self.h_timerActivate = True
-
 
     def publish_pioneer_pose(self,predicted_position):
         orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
@@ -121,8 +123,16 @@ class FastSlamNode:
         self.camera_flag = True
         self.measurements = fiducial_transforms
 
+    # Pose callback
+    def pose_callback(self, pose):
+        if not self.odom_flag:
+            self.odom_flag = True
+            euler_angles = tf.euler_from_quaternion([0, 0, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
+            self.odom_first = [0, pose.pose.pose.position.x, pose.pose.pose.position.y, euler_angles[2]] # flag, x, y, theta
 
-    def plot_data_process(self,data_queue):
+        self.poses.append([pose.pose.pose.position.x, pose.pose.pose.position.y, euler_angles[2]])
+
+    def plot_data_process(self, data_queue):
         """
         Entry point for the separate process responsible for plotting.
         """
@@ -169,7 +179,29 @@ class FastSlamNode:
                     scale=1, 
                     color='g', 
                     width=0.005)
-                
+
+                if data['pose']:
+                    pose = data['pose']
+                    # Plot pose topic
+                    if pose:
+                        print(pose[0])
+                        plt.plot(pose[0][:, 0], pose[0][:, 1], 'm', label="Robot Odometry")
+                        # Plot arrows based on theta
+                        arrow_length = 0.4  # Length of arrows
+                        dx = arrow_length * np.cos(pose[0][-1,2])  # Arrow x-component
+                        dy = arrow_length * np.sin(pose[0][-1,2])  # Arrow y-component
+                        plt.quiver(
+                            pose[0][-1,0],
+                            pose[0][-1,1],
+                            dx, 
+                            dy, 
+                            angles='xy', 
+                            scale_units='xy', 
+                            scale=1, 
+                            color='g', 
+                            width=0.005)
+
+
                 # Plot configurations
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
@@ -187,7 +219,7 @@ class FastSlamNode:
         self.main_loop_counter+=1
         
         # Update particle position
-        self.fastslam.odometry_update([time.time()]+self.control)
+        self.fastslam.odometry_update([time.time()]+self.control, self.odom_first)
         
         # Update landmark information
         if self.camera_flag:
@@ -195,7 +227,7 @@ class FastSlamNode:
             self.fastslam.landmarks_update(self.measurements)
         
         # Get average position of the particles
-        predicted_position = self.fastslam.get_predicted_position()
+        predicted_position = self.fastslam.get_predicted_position(self.odom_first)
 
         # Publish results
         self.publish_pioneer_pose(predicted_position)
@@ -205,6 +237,7 @@ class FastSlamNode:
             # Put the data and termination flag into the queue
             data = {
             'data': self.fastslam.get_plot_data(),
+            'pose': [self.poses],
             'terminate_flag': False
             }
             self.data_queue.put(data)
