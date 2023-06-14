@@ -7,6 +7,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   nav_msgs
+  geometry_msgs
+  fiducial_msgs
 )
 
 #catkin_python_setup()
@@ -36,4 +38,6 @@ catkin_package(
   rospy 
   std_msgs
   nav_msgs
+  geometry_msgs
+  fiducial_msgs
 )

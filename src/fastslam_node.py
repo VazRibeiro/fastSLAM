@@ -1,31 +1,38 @@
 #!/usr/bin/env python3
+'''
+Implements and runs the FastSlam1 ROS node which interfaces the 
+ROS configurations, subscribers and publishers with the FastSlam1
+with Known Correspondences algorithm. Runs a second process to 
+plot the results.
+'''
 
 import rospy
-from std_msgs.msg import Float64
+import tf.transformations as tf
+import numpy as np
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+from fiducial_msgs.msg import FiducialTransformArray
+import time
+from fastslam1 import FastSLAM1
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+import multiprocessing as mp
 
-# This following line is just to show how you can import your own custom message
-# it should follow the convention: name_of_your_package.msg import name_of_your_message
-#from demo_python.msg import Points
-
-# Import your custom code to implement your algorithm logic here
-# for example:
-#from bayes_filter import BayesFilter
 
 class FastSlamNode:
 
     def __init__(self):
-
         # Initialize some necessary variables here
         self.node_frequency = None
-        self.sub_fake_sensor_topic = None
-        self.pub_demo_topic = None
-        
-        # Create the bayes filter object here
-        #self.bayes_filter = BayesFilter()
-
-        # Store the data received from a fake sensor
-        self.fake_sensor = 0.0
+        self.vel_sub = None
+        self.fid_sub = None
+        self.pub_pioneer_pose = None
+        #flags
+        self.camera_flag = False
+        self.main_loop_counter = 0
+        self.control = [0, 0]
+        self.measurements = FiducialTransformArray()
+        self.past_time = 0
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -37,35 +44,44 @@ class FastSlamNode:
         # Initialize the publishers and subscribers
         self.initialize_subscribers()
         self.initialize_publishers()
+
+        # Initialize Algorithm
+        self.fastslam = FastSLAM1()
         
         # Initialize the timer with the corresponding interruption to work at a constant rate
         self.initialize_timer()
+        
+        # Initialize the data queue
+        self.data_queue = mp.Queue()
+        # Create a separate process for plotting
+        self.plot_process = mp.Process(target=self.plot_data_process,args=(self.data_queue,))
+        self.plot_process.start()
+
 
     def load_parameters(self):
         """
         Load the parameters from the configuration server (ROS)
         """
-
         # Node frequency of operation
-        self.node_frequency = rospy.get_param('node_frequency', 30)
+        self.node_frequency = rospy.get_param('node_frequency', 45)
         rospy.loginfo('Node Frequency: %s', self.node_frequency)
+
 
     def initialize_subscribers(self):
         """
-        Initialize the subscribers to the topics. You should subscribe to
-        sensor data and odometry (if applicable) here
+        Initialize the subscribers. 
         """
+        self.vel_sub = rospy.Subscriber('/cmd_vel', Twist, self.vel_callback)
+        self.fid_sub = rospy.Subscriber('/fiducial_transforms', FiducialTransformArray, self.fid_callback)
+        #self.pose_sub = rospy.Subscriber('/pose', Odometry, self.pose_callback)
 
-        # Subscribe to the topic '/fake_sensor_topic'
-        self.sub_fake_sensor_topic = rospy.Subscriber('/fake_sensor_topic', Float64, self.callback_fake_sensor_topic)
 
     def initialize_publishers(self):
         """
-        You should/can initialize the publishers for the results of your algorithm here.
+        Initialize the publishers.
         """
+        self.pub_pioneer_pose = rospy.Publisher('/pioneer_pose', Odometry, queue_size=10)
 
-        # Initialize the publisher to the topic '/output_topic'
-        self.pub_demo_topic = rospy.Publisher('/output_topic', Odometry, queue_size=10)
 
     def initialize_timer(self):
         """
@@ -74,56 +90,144 @@ class FastSlamNode:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.node_frequency), self.timer_callback)
         self.h_timerActivate = True
 
-    def timer_callback(self, timer):
-        """Here you should invoke methods to perform the logic computations of your algorithm.
-        Note, the timer object is not used here, but it is passed as an argument to the callback by default.
-        This callback is called at a fixed rate as defined in the initialization of the timer.
 
-        At the end of the calculations of your EKF, UKF, Particle Filer, or SLAM algorithm, you should publish the results to the corresponding topics.
-        """
-
-        # Do something here at a fixed rate
-        rospy.loginfo('Timer callback called at: %s', rospy.get_time())
-
-        # Perform some logic with the sensor data received
-        my_fancy_formula = self.fake_sensor + 1.0
-        
-        # For example, if you were implementing a bayes filter, you could do the following
-        #self.bayes_filter.predict(0.03, 0.5)
-        # Update the model of our filter (this is just a placeholder for your algorithm)
-        #self.bayes_filter.update(2)
-
-        # Create the message to publish
+    def publish_pioneer_pose(self,predicted_position):
+        orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
         msg = Odometry()
-        msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = 'filter'
-        msg.pose.pose.position.x = my_fancy_formula
+        msg.header.stamp = rospy.Time.from_sec(predicted_position[0])
+        msg.header.frame_id = 'odom'
+        msg.pose.pose.position.x = predicted_position[1]
+        msg.pose.pose.position.y = predicted_position[2]
+        msg.pose.pose.position.z = 0
+        msg.pose.pose.orientation.x = orientation[0]
+        msg.pose.pose.orientation.y = orientation[1]
+        msg.pose.pose.orientation.z = orientation[2]
+        msg.pose.pose.orientation.w = orientation[3]
+        self.pub_pioneer_pose.publish(msg)
 
-        # Publish the data received to the topic '/output_topic'
-        self.pub_demo_topic.publish(msg)
 
-    def callback_fake_sensor_topic(self, msg):
+    # Odometry callback
+    def vel_callback(self, cmd_vel):
+        '''
+        Callback function for the command velocity topic subscriber.
+        '''
+        # Extract linear and angular velocities from the current velocity message
+        v = cmd_vel.linear.x
+        w = cmd_vel.angular.z
+        self.control = [v,w]
+
+    # Aruco markers callback
+    def fid_callback(self, fiducial_transforms):
+        self.camera_flag = True
+        self.measurements = fiducial_transforms
+
+
+    def plot_data_process(self,data_queue):
         """
-        Callback function for the subscriber of the topic '/demo_topic'. This function is called
-        whenever a message is received by the subscriber. For example, you can receive the data from
-        a sensor here and store it in a variable to be processed later or perform prediction steps
-        of your algorithm here (it is up to you to decide).
+        Entry point for the separate process responsible for plotting.
         """
+        while True:
+            data = data_queue.get()  # Get data from the queue
+            if data['terminate_flag']:
+                break
+            if data['data']:
+                predicted_position, x, y, ids, mean, cov = data['data']
+                # Clear all
+                plt.cla()
+                
+                # Plot Robot State Estimate (average position)
+                plt.plot(predicted_position[:, 0], predicted_position[:, 1],
+                        'r', label="Robot State Estimate")
+                
+                # Plot particles
+                plt.scatter(x, y, s=5, c='k', alpha=0.5, label="Particles")
 
-        # Do something with the message received
-        rospy.loginfo('Received data: %s', msg.data)
+                # Plot mean points and covariance ellipses
+                for i in range(len(mean[0])):
+                    # Plot mean point
+                    plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
+                    # Plot covariance ellipse
+                    eigenvalues, eigenvectors = np.linalg.eig(cov[0][i])
+                    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+                    ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
+                    plt.gca().add_patch(ellipse)
 
-        # Store the sensor message to be processed later (or process now depending on the application)
-        self.fake_sensor = msg.data
+                    # Add ID as text near the mean point
+                    plt.text(mean[0][i, 0], mean[0][i, 1], str(ids[i]), fontsize=8, ha='left', va='center')
+
+                # Plot arrows based on theta
+                arrow_length = 0.4  # Length of arrows
+                dx = arrow_length * np.cos(predicted_position[-1,2])  # Arrow x-component
+                dy = arrow_length * np.sin(predicted_position[-1,2])  # Arrow y-component
+                plt.quiver(
+                    predicted_position[-1,0],
+                    predicted_position[-1,1],
+                    dx, 
+                    dy, 
+                    angles='xy', 
+                    scale_units='xy', 
+                    scale=1, 
+                    color='g', 
+                    width=0.005)
+                
+                # Plot configurations
+                plt.title('Fast SLAM 1.0 with known correspondences')
+                plt.legend()
+                plt.pause(1e-16)
+        # Terminate the plot process when the loop breaks
+        plt.close()
+
+    ################################################################################
+    # Main repeating algorithm
+    def timer_callback(self, timer):
+        """
+        Perform repeating tasks.
+        """
+        time1 = time.time()
+        self.main_loop_counter+=1
         
+        # Update particle position
+        self.fastslam.odometry_update([time.time()]+self.control)
+        
+        # Update landmark information
+        if self.camera_flag:
+            self.camera_flag  = False
+            self.fastslam.landmarks_update(self.measurements)
+        
+        # Get average position of the particles
+        predicted_position = self.fastslam.get_predicted_position()
+
+        # Publish results
+        self.publish_pioneer_pose(predicted_position)
+
+        # Plot results
+        if ((self.main_loop_counter) % 4 == 0):
+            # Put the data and termination flag into the queue
+            data = {
+            'data': self.fastslam.get_plot_data(),
+            'terminate_flag': False
+            }
+            self.data_queue.put(data)
+            self.main_loop_counter = 0
+
+        time2 = time.time()
+        #print(time2-time1)
+    ################################################################################
+
 
 def main():
-
-    # Create an instance of the DemoNode class
+    # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
 
-    # Spin to keep the script for exiting
     rospy.spin()
+    # Terminate the plot process when the main script exits
+    data = {
+        'data': (),
+        'terminate_flag': True
+    }
+    fastslam_node.data_queue.put(data)
+    fastslam_node.plot_process.terminate()
+
 
 if __name__ == '__main__':
     main()
