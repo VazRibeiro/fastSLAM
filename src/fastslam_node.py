@@ -201,7 +201,7 @@ class FastSlamNode:
         self.publish_pioneer_pose(predicted_position)
 
         # Plot results
-        if ((self.main_loop_counter) % 4 == 0):
+        if ((self.main_loop_counter) % 6 == 0):
             # Put the data and termination flag into the queue
             data = {
             'data': self.fastslam.get_plot_data(),

@@ -23,17 +23,17 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([2.1, 2.1, 2.1, 2.1, 1.1, 1.1])
+        motion_noise = np.array([1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.03, 0.001],[0.001, 0.03]])
+        Q = np.array([[0.008, 0.0001],[0.0001, 0.008]])
         self.measurement_model = MeasurementModel(Q)
         # Initialize Time
         self.initial_timestamp = time.time()
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]
         # Array of N particles
-        self.N_particles = 200
+        self.N_particles = 100
         # Initial position
         initial_variance = np.array([0,0,0])
         # Create particles
@@ -74,7 +74,7 @@ class FastSLAM1():
             return
         # Loop all the measurements in the fiducial transform array
         for transform in measurements.transforms:
-            x = transform.transform.translation.z
+            x = transform.transform.translation.z*0.75
             y = transform.transform.translation.x
             bearing = np.arctan2(-y,x)
             range = np.sqrt(x**2 + y**2)
