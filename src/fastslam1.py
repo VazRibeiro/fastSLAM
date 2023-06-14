@@ -23,10 +23,10 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.8, 0.8, 0.8, 0.8, 1.1, 1.1])
+        motion_noise = np.array([2.1, 2.1, 2.1, 2.1, 1.1, 1.1])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.diagflat(np.array([0.01, 0.01]))
+        Q = np.array([[0.03, 0.001],[0.001, 0.03]])
         self.measurement_model = MeasurementModel(Q)
         # Initialize Time
         self.initial_timestamp = time.time()
@@ -34,7 +34,7 @@ class FastSLAM1():
         initial_pose  = [0,0,0]
         # Array of N particles
         self.N_particles = 200
-        # Initial position variance
+        # Initial position
         initial_variance = np.array([0,0,0])
         # Create particles
         self.particles = []

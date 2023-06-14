@@ -9,9 +9,7 @@ import numpy as np
 class MeasurementModel():
     def __init__(self, Q):
         '''
-        Input:
-            Q: Measurement covariance matrix.
-               Dimension: [2, 2].
+        Input: Q: Measurement noise 2x2 matrix.
         '''
         self.Q = Q
 
@@ -72,18 +70,8 @@ class MeasurementModel():
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
         # Compute measurement covariance
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
-        #print('Determinante:' + str(np.linalg.det(Q))+'  ,'+str(Q))
         # Compute Kalman gain
         K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
-        # if abs(np.linalg.det(Q)) > 0.0001:
-        #     K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
-        # else:
-        #     return
-        #     # Regularization parameter (small positive value)
-        #     regularization_param = 0.01
-        #     # Apply regularization by adding small values to diagonal elements
-        #     Q = Q + np.eye(Q.shape[0])*regularization_param
-        #     K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
 
         # Update mean
         difference = np.array([[measurement[2] - dx],
