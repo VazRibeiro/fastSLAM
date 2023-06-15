@@ -23,17 +23,20 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
+        motion_noise = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.008, 0.0001],[0.0001, 0.008]])
+        Q = np.array([[0.01, 0.0001],[0.0001, 0.01]])
         self.measurement_model = MeasurementModel(Q)
         # Initialize Time
         self.initial_timestamp = time.time()
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]
+        self.odom_x = initial_pose[0]
+        self.odom_y = initial_pose[1]
+        self.odom_theta = initial_pose[2]
         # Array of N particles
-        self.N_particles = 100
+        self.N_particles = 150
         # Initial position
         initial_variance = np.array([0,0,0])
         # Create particles
@@ -48,6 +51,7 @@ class FastSLAM1():
             self.particles.append(particle)
         # Initialize the array to keep the average position
         self.predicted_position = np.array([[0,0,0]])
+        self.odometry = np.array([[0,0,0]])
         self.measured_ids = np.zeros((0,1))
         self.accepted_landmarks = [33, 32]
 
@@ -55,13 +59,30 @@ class FastSLAM1():
     def odometry_update(self, control):
         '''
         Update the estimation of the robot position using the previous position and
-        the control action [timestamp v, w]
+        the control action [timestamp v, w]. Also update odometry position.
         '''
+        # Update odometry estimate
+        x_t = self.motion_model.sample_real_model_velocity(
+            self.particles[0].timestamp, 
+            self.odom_x, 
+            self.odom_y, 
+            self.odom_theta, 
+            control)
+        self.odom_x = x_t[0]
+        self.odom_y = x_t[1]
+        self.odom_theta = x_t[2]
         for particle in self.particles:
-            x_t = self.motion_model.sample_motion_model_velocity(particle, control)
+            # Update robot state estimate
+            x_t = self.motion_model.sample_motion_model_velocity(
+                particle.timestamp, 
+                particle.x, 
+                particle.y, 
+                particle.theta, 
+                control)
             particle.x = x_t[0]
             particle.y = x_t[1]
             particle.theta = x_t[2]
+            particle.timestamp = x_t[3]  
 
 
     def landmarks_update(self,measurements):
@@ -118,13 +139,11 @@ class FastSLAM1():
         sum = 0.0
         for particle in self.particles:
             sum += particle.weight
-
         # If sum is too small, equally assign weights to all particles
         if sum < 1e-10:
             for particle in self.particles:
                 particle.weight = 1.0 / self.N_particles
             return
-
         for particle in self.particles:
             particle.weight /= sum
 
@@ -137,12 +156,13 @@ class FastSLAM1():
         weights = []
         for particle in self.particles:
             weights.append(particle.weight)
-
         # Resample all particles according to importance weights
-        new_indexes =\
-            np.random.choice(len(self.particles), len(self.particles),
-                             replace=True, p=weights)
-
+        new_indexes = np.random.choice(
+            len(self.particles), 
+            len(self.particles),
+            replace=True, 
+            p=weights
+            )
         # Update new particles
         new_particles = []
         for index in new_indexes:
@@ -166,9 +186,18 @@ class FastSLAM1():
         y /= self.N_particles
         theta /= self.N_particles
         # If the position changed enough, save the new estimate
-        if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1 or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
-            self.predicted_position = np.append(self.predicted_position, [[x,y,theta]], axis=0)
-        return np.array([timestamp,x,y,theta])
+        if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1\
+        or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
+            self.predicted_position = np.append(
+                self.predicted_position, 
+                [[x,y,theta]], 
+                axis=0
+                )
+            self.odometry = np.append(
+                self.odometry, 
+                [[self.odom_x,self.odom_y,self.odom_theta]], 
+                axis=0
+                )
     
 
     def get_plot_data(self):
@@ -180,7 +209,7 @@ class FastSLAM1():
         ids = self.measured_ids
         mean = [particle.mean for particle in self.particles]
         cov = [particle.cov for particle in self.particles]
-        return self.predicted_position, x, y, ids, mean, cov
+        return self.predicted_position, x, y, ids, mean, cov, self.odometry
 
 
 if __name__ == "__main__":

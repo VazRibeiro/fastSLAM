@@ -64,7 +64,6 @@ class MeasurementModel():
         Update landmark mean and covariance using EKF.
         This landmark has to be observed before.
         '''
-        # Compute expected measurement
         dx,dy,q =self.compute_expected_measurement(particle,index)
         range_exp = np.sqrt(q)
         bearing_exp = np.arctan2(dy, dx) - particle.theta
@@ -93,18 +92,9 @@ class MeasurementModel():
 
     def compute_correspondence(self, particle, measurement, index):
         '''
-        Implementation for Fast SLAM 1.0.
         Compute the likelihood of correspondence for between a measurement and
-        a given landmark.
-        This process is the same as updating a landmark mean with EKF method.
-
-        Input:
-            particle: Particle() object to be updated.
-            measurement: measurement data Z_t.
-                         [timestamp, #landmark, range, bearing]
-            index: the index of the landmark (0 ~ 15).
-        Output:
-            likehood: likelihood of correspondence
+        a given landmark.This process is the same as updating a landmark mean 
+        with EKF method.
         '''
         # Compute expected measurement
         range_expected, bearing_expected =\

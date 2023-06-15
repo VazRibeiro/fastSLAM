@@ -10,7 +10,6 @@ import rospy
 import tf.transformations as tf
 import numpy as np
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
 from fiducial_msgs.msg import FiducialTransformArray
 import time
 from fastslam1 import FastSLAM1
@@ -26,7 +25,6 @@ class FastSlamNode:
         self.node_frequency = None
         self.vel_sub = None
         self.fid_sub = None
-        self.pub_pioneer_pose = None
         #flags
         self.camera_flag = False
         self.main_loop_counter = 0
@@ -48,13 +46,15 @@ class FastSlamNode:
         # Initialize Algorithm
         self.fastslam = FastSLAM1()
         
-        # Initialize the timer with the corresponding interruption to work at a constant rate
+        # Initialize the timer
         self.initialize_timer()
         
         # Initialize the data queue
         self.data_queue = mp.Queue()
         # Create a separate process for plotting
-        self.plot_process = mp.Process(target=self.plot_data_process,args=(self.data_queue,))
+        self.plot_process = mp.Process(
+            target=self.plot_data_process,
+            args=(self.data_queue,))
         self.plot_process.start()
 
 
@@ -71,8 +71,14 @@ class FastSlamNode:
         """
         Initialize the subscribers. 
         """
-        self.vel_sub = rospy.Subscriber('/cmd_vel', Twist, self.vel_callback)
-        self.fid_sub = rospy.Subscriber('/fiducial_transforms', FiducialTransformArray, self.fid_callback)
+        self.vel_sub = rospy.Subscriber(
+            '/pose', 
+            Odometry, 
+            self.vel_callback)
+        self.fid_sub = rospy.Subscriber(
+            '/fiducial_transforms', 
+            FiducialTransformArray, 
+            self.fid_callback)
         #self.pose_sub = rospy.Subscriber('/pose', Odometry, self.pose_callback)
 
 
@@ -80,40 +86,27 @@ class FastSlamNode:
         """
         Initialize the publishers.
         """
-        self.pub_pioneer_pose = rospy.Publisher('/pioneer_pose', Odometry, queue_size=10)
+        pass
 
 
     def initialize_timer(self):
         """
         Here we create a timer to trigger the callback function at a fixed rate.
         """
-        self.timer = rospy.Timer(rospy.Duration(1.0 / self.node_frequency), self.timer_callback)
+        self.timer = rospy.Timer(
+            rospy.Duration(1.0 / self.node_frequency), 
+            self.timer_callback)
         self.h_timerActivate = True
 
 
-    def publish_pioneer_pose(self,predicted_position):
-        orientation = tf.quaternion_from_euler(0,0,predicted_position[3])
-        msg = Odometry()
-        msg.header.stamp = rospy.Time.from_sec(predicted_position[0])
-        msg.header.frame_id = 'odom'
-        msg.pose.pose.position.x = predicted_position[1]
-        msg.pose.pose.position.y = predicted_position[2]
-        msg.pose.pose.position.z = 0
-        msg.pose.pose.orientation.x = orientation[0]
-        msg.pose.pose.orientation.y = orientation[1]
-        msg.pose.pose.orientation.z = orientation[2]
-        msg.pose.pose.orientation.w = orientation[3]
-        self.pub_pioneer_pose.publish(msg)
-
-
     # Odometry callback
-    def vel_callback(self, cmd_vel):
+    def vel_callback(self, vel):
         '''
         Callback function for the command velocity topic subscriber.
         '''
         # Extract linear and angular velocities from the current velocity message
-        v = cmd_vel.linear.x
-        w = cmd_vel.angular.z
+        v = vel.twist.twist.linear.x
+        w = vel.twist.twist.angular.z
         self.control = [v,w]
 
     # Aruco markers callback
@@ -131,31 +124,58 @@ class FastSlamNode:
             if data['terminate_flag']:
                 break
             if data['data']:
-                predicted_position, x, y, ids, mean, cov = data['data']
+                predicted_position, x, y, ids, mean, cov, odometry = data['data']
                 # Clear all
                 plt.cla()
-                
                 # Plot Robot State Estimate (average position)
-                plt.plot(predicted_position[:, 0], predicted_position[:, 1],
-                        'r', label="Robot State Estimate")
-                
+                plt.plot(
+                    predicted_position[:, 0], 
+                    predicted_position[:, 1],
+                    'r', 
+                    label="Robot State Estimate"
+                    )
+                #Plot Odometry estimate
+                print(odometry)
+                plt.plot(
+                    odometry[:, 0], 
+                    odometry[:, 1],
+                    'orange', 
+                    label="Odometry estimate"
+                    )         
                 # Plot particles
                 plt.scatter(x, y, s=5, c='k', alpha=0.5, label="Particles")
 
                 # Plot mean points and covariance ellipses
                 for i in range(len(mean[0])):
                     # Plot mean point
-                    plt.scatter(mean[0][i, 0], mean[0][i, 1], c='b', marker='o')
+                    plt.scatter(
+                        mean[0][i, 0], 
+                        mean[0][i, 1], 
+                        c='b', marker='.')
                     # Plot covariance ellipse
                     eigenvalues, eigenvectors = np.linalg.eig(cov[0][i])
-                    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
-                    ellipse = Ellipse(mean[0][i], 2 * np.sqrt(eigenvalues[0]), 2 * np.sqrt(eigenvalues[1]), angle=angle, fill=False)
+                    angle = np.degrees(
+                        np.arctan2(eigenvectors[1, 0], 
+                        eigenvectors[0, 0])
+                        )
+                    ellipse = Ellipse(
+                        mean[0][i], 2 * np.sqrt(eigenvalues[0]), 
+                        2 * np.sqrt(eigenvalues[1]), 
+                        angle=angle, 
+                         fill=True,
+                         alpha=0.4
+                        )
                     plt.gca().add_patch(ellipse)
-
                     # Add ID as text near the mean point
-                    plt.text(mean[0][i, 0], mean[0][i, 1], str(ids[i]), fontsize=8, ha='left', va='center')
-
-                # Plot arrows based on theta
+                    plt.text(
+                        mean[0][i, 0], 
+                        mean[0][i, 1], 
+                        str(int(ids[i][0])), 
+                        fontsize=10, 
+                        ha='center', 
+                        va='bottom'
+                        )
+                # Plot arrows for robot state
                 arrow_length = 0.4  # Length of arrows
                 dx = arrow_length * np.cos(predicted_position[-1,2])  # Arrow x-component
                 dy = arrow_length * np.sin(predicted_position[-1,2])  # Arrow y-component
@@ -168,8 +188,23 @@ class FastSlamNode:
                     scale_units='xy', 
                     scale=1, 
                     color='g', 
-                    width=0.005)
-                
+                    width=0.005
+                    )
+                # Plot arrows for odometry
+                arrow_length = 0.4  # Length of arrows
+                dx = arrow_length * np.cos(odometry[-1,2])  # Arrow x-component
+                dy = arrow_length * np.sin(odometry[-1,2])  # Arrow y-component
+                plt.quiver(
+                    odometry[-1,0],
+                    odometry[-1,1],
+                    dx, 
+                    dy, 
+                    angles='xy', 
+                    scale_units='xy', 
+                    scale=1, 
+                    color='grey', 
+                    width=0.005
+                    )                
                 # Plot configurations
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
@@ -195,10 +230,7 @@ class FastSlamNode:
             self.fastslam.landmarks_update(self.measurements)
         
         # Get average position of the particles
-        predicted_position = self.fastslam.get_predicted_position()
-
-        # Publish results
-        self.publish_pioneer_pose(predicted_position)
+        self.fastslam.get_predicted_position()
 
         # Plot results
         if ((self.main_loop_counter) % 6 == 0):
