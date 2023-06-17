@@ -85,6 +85,11 @@ class FastSLAM1():
             particle.x = x_t[0]
             particle.y = x_t[1]
             particle.theta = x_t[2]
+            # Limit θ within [-pi, pi]
+            if (particle.theta > np.pi):
+                particle.theta -= 2 * np.pi
+            elif (particle.theta < -np.pi):
+                particle.theta += 2 * np.pi
         self.timestamp = control[0]
 
 
