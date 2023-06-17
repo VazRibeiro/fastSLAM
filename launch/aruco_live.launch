@@ -5,7 +5,7 @@
   <arg name="transport" default="compressed"/>
   
   <!-- Aruco markers configurations-->
-  <arg name="fiducial_len" default="0.14"/>
+  <arg name="fiducial_len" default="0.135"/>
   <arg name="dictionary" default="5"/>
   <arg name="do_pose_estimation" default="true"/>
   <arg name="ignore_fiducials" default="" />

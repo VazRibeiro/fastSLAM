@@ -7,6 +7,7 @@ plot the results.
 '''
 
 import rospy
+import sys
 import tf.transformations as tf
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -27,10 +28,12 @@ class FastSlamNode:
         self.fid_sub = None
         #flags
         self.camera_flag = False
+        self.odometry_flag = False
         self.main_loop_counter = 0
+        self.first_odometry_callback = False
         self.control = [0, 0]
         self.measurements = FiducialTransformArray()
-        self.past_time = 0
+        self.data_association = 'none'
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -63,7 +66,7 @@ class FastSlamNode:
         Load the parameters from the configuration server (ROS)
         """
         # Node frequency of operation
-        self.node_frequency = rospy.get_param('node_frequency', 45)
+        self.node_frequency = rospy.get_param('node_frequency', 100)
         rospy.loginfo('Node Frequency: %s', self.node_frequency)
 
 
@@ -104,10 +107,14 @@ class FastSlamNode:
         '''
         Callback function for the command velocity topic subscriber.
         '''
+        self.odometry_flag = True
+        self.first_odometry_callback = True
         # Extract linear and angular velocities from the current velocity message
+        time = vel.header.stamp
+        time = time.to_sec()
         v = vel.twist.twist.linear.x
         w = vel.twist.twist.angular.z
-        self.control = [v,w]
+        self.control = [time,v,w]
 
     # Aruco markers callback
     def fid_callback(self, fiducial_transforms):
@@ -119,7 +126,10 @@ class FastSlamNode:
         """
         Entry point for the separate process responsible for plotting.
         """
+        timer = time.time()
         while True:
+            previous_timer = timer
+            timer = time.time()
             data = data_queue.get()  # Get data from the queue
             if data['terminate_flag']:
                 break
@@ -127,6 +137,12 @@ class FastSlamNode:
                 predicted_position, x, y, ids, mean, cov, odometry = data['data']
                 # Clear all
                 plt.cla()
+                # Plot start
+                plt.scatter(
+                    odometry[:,0][0], 
+                    odometry[:,1][0], 
+                    s=150, c='blue', marker='*',
+                    label="Start position")
                 # Plot Robot State Estimate (average position)
                 plt.plot(
                     predicted_position[:, 0], 
@@ -135,7 +151,6 @@ class FastSlamNode:
                     label="Robot State Estimate"
                     )
                 #Plot Odometry estimate
-                print(odometry)
                 plt.plot(
                     odometry[:, 0], 
                     odometry[:, 1],
@@ -143,7 +158,7 @@ class FastSlamNode:
                     label="Odometry estimate"
                     )         
                 # Plot particles
-                plt.scatter(x, y, s=5, c='k', alpha=0.5, label="Particles")
+                plt.scatter(x, y, s=5, c='k', alpha=0.5)
 
                 # Plot mean points and covariance ellipses
                 for i in range(len(mean[0])):
@@ -209,6 +224,7 @@ class FastSlamNode:
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
                 plt.pause(1e-16)
+            #print("plotting time: " + str(timer-previous_timer))
         # Terminate the plot process when the loop breaks
         plt.close()
 
@@ -221,19 +237,23 @@ class FastSlamNode:
         time1 = time.time()
         self.main_loop_counter+=1
         
-        # Update particle position
-        self.fastslam.odometry_update([time.time()]+self.control)
-        
-        # Update landmark information
-        if self.camera_flag:
-            self.camera_flag  = False
-            self.fastslam.landmarks_update(self.measurements)
+        if self.first_odometry_callback:
+            if self.odometry_flag:
+                self.odometry_flag  = False
+                # Update particle position
+                self.fastslam.odometry_update(self.control)
+            
+            # Update landmark information
+            if self.camera_flag:
+                self.camera_flag  = False
+                # Update landmark estimation
+                self.fastslam.landmarks_update(self.measurements)
         
         # Get average position of the particles
         self.fastslam.get_predicted_position()
 
         # Plot results
-        if ((self.main_loop_counter) % 6 == 0):
+        if ((self.main_loop_counter) % 40 == 0):
             # Put the data and termination flag into the queue
             data = {
             'data': self.fastslam.get_plot_data(),
@@ -242,14 +262,22 @@ class FastSlamNode:
             self.data_queue.put(data)
             self.main_loop_counter = 0
 
-        time2 = time.time()
-        #print(time2-time1)
+        #print("Algorithm time: " + str(time.time()-time1))
     ################################################################################
 
 
 def main():
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
+    # Access the command-line arguments
+    args = rospy.myargv(argv=sys.argv)
+    # Check if the required number of arguments is passed
+    if len(args) == 2:
+        fastslam_node.data_association = args[1]
+        rospy.loginfo("Received arguments: data_association = %s", args[1])
+    else:
+        rospy.logwarn("Invalid number of arguments. Data association set to known.")
+        fastslam_node.data_association = 'known'
 
     rospy.spin()
     # Terminate the plot process when the main script exits

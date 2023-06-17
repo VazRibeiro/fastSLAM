@@ -6,11 +6,10 @@ Particle with robot state and observed landmark state information.
 import numpy as np
 
 class Particle:
-    def __init__(self,time,pose,N_particles):
-        self.initialize(time,pose,N_particles)
+    def __init__(self,pose,N_particles):
+        self.initialize(pose,N_particles)
     
-    def initialize(self,time,pose,N_particles):
-        self.timestamp = time
+    def initialize(self,pose,N_particles):
         self.x = pose[0]
         self.y = pose[1]
         self.theta = pose[2]

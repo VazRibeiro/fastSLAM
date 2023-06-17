@@ -23,27 +23,26 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
+        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.01, 0.0001],[0.0001, 0.01]])
+        Q = np.array([[0.05, 0.01],[0.01, 0.05]])
         self.measurement_model = MeasurementModel(Q)
-        # Initialize Time
-        self.initial_timestamp = time.time()
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]
         self.odom_x = initial_pose[0]
         self.odom_y = initial_pose[1]
         self.odom_theta = initial_pose[2]
         # Array of N particles
-        self.N_particles = 150
+        self.N_particles = 50
         # Initial position
         initial_variance = np.array([0,0,0])
         # Create particles
         self.particles = []
+        self.timestamp = 0
         for i in range(self.N_particles):
             # Initialize the particle
-            particle=Particle(self.initial_timestamp,initial_pose,self.N_particles)
+            particle=Particle(initial_pose,self.N_particles)
             # Apply Gaussian noise to initial position of the particles
             particle.x = np.random.normal(particle.x, initial_variance[0])
             particle.y = np.random.normal(particle.y, initial_variance[1])
@@ -61,9 +60,13 @@ class FastSLAM1():
         Update the estimation of the robot position using the previous position and
         the control action [timestamp v, w]. Also update odometry position.
         '''
+        # Initialize time in particles
+        if self.timestamp == 0:
+            self.timestamp = control[0]
+            return
         # Update odometry estimate
         x_t = self.motion_model.sample_real_model_velocity(
-            self.particles[0].timestamp, 
+            self.timestamp, 
             self.odom_x, 
             self.odom_y, 
             self.odom_theta, 
@@ -74,7 +77,7 @@ class FastSLAM1():
         for particle in self.particles:
             # Update robot state estimate
             x_t = self.motion_model.sample_motion_model_velocity(
-                particle.timestamp, 
+                self.timestamp, 
                 particle.x, 
                 particle.y, 
                 particle.theta, 
@@ -82,7 +85,7 @@ class FastSLAM1():
             particle.x = x_t[0]
             particle.y = x_t[1]
             particle.theta = x_t[2]
-            particle.timestamp = x_t[3]  
+        self.timestamp = control[0]
 
 
     def landmarks_update(self,measurements):
@@ -93,9 +96,13 @@ class FastSLAM1():
         if len(measurements.transforms) == 0:
             #print("No aruco markers...")
             return
+        # Check if measurements late
+        if measurements.header.stamp.to_sec() < self.timestamp:
+            print("lost a message...")
+            return
         # Loop all the measurements in the fiducial transform array
         for transform in measurements.transforms:
-            x = transform.transform.translation.z*0.75
+            x = transform.transform.translation.z
             y = transform.transform.translation.x
             bearing = np.arctan2(-y,x)
             range = np.sqrt(x**2 + y**2)
@@ -174,7 +181,6 @@ class FastSLAM1():
         '''
         Calculate the average position of the particles
         '''
-        timestamp = self.particles[0].timestamp
         x = 0.0
         y = 0.0
         theta = 0.0
