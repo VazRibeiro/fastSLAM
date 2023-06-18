@@ -26,7 +26,7 @@ class FastSLAM1():
         motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.05, 0.01],[0.01, 0.05]])
+        Q = np.array([[0.0005, 0.0],[0.0, 0.0005]])
         self.measurement_model = MeasurementModel(Q)
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]

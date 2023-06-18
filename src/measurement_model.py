@@ -66,17 +66,22 @@ class MeasurementModel():
         '''
         dx,dy,q =self.compute_expected_measurement(particle,index)
         range_exp = np.sqrt(q)
-        bearing_exp = np.arctan2(dy, dx) - particle.theta
+        if np.arctan2(dy, dx)*particle.theta<0 and \
+           abs(np.arctan2(dy, dx) + particle.theta)+abs(particle.theta)>np.pi:
+            bearing_exp = np.arctan2(dy, dx) + particle.theta
+        else:
+            bearing_exp = np.arctan2(dy, dx) - particle.theta
+
         # Get Jacobian wrt landmark state
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
         # Compute measurement covariance
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
         # Compute Kalman gain
         K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
-
         # Update mean
         difference = np.array([[measurement[0] - range_exp],
                                [measurement[1] - bearing_exp]])
+        #print("id,meas, bear,arc,teta",id,measurement[1],bearing_exp,np.arctan2(dy, dx),particle.theta)
         innovation = K.dot(difference)
         particle.mean[index] += innovation.T[0]
         # Update covariance
