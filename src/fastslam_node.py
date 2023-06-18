@@ -34,6 +34,8 @@ class FastSlamNode:
         self.control = [0, 0]
         self.measurements = FiducialTransformArray()
         self.data_association = 'none'
+        self.resampler = 'none'
+        self.algorithm = 'none'
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -247,8 +249,14 @@ class FastSlamNode:
             if self.camera_flag:
                 self.camera_flag  = False
                 # Update landmark estimation
-                self.fastslam.landmarks_update(self.measurements)
-        
+                if self.algorithm == 'fastslam1':
+                    if self.data_association =='known':
+                        self.fastslam.landmarks_update_known(self.measurements,self.resampler)
+                    elif self.data_association =='unknown':
+                        pass
+                elif self.algorithm == 'fastlam2':
+                    pass
+
         # Get average position of the particles
         self.fastslam.get_predicted_position()
 
@@ -272,12 +280,36 @@ def main():
     # Access the command-line arguments
     args = rospy.myargv(argv=sys.argv)
     # Check if the required number of arguments is passed
-    if len(args) == 2:
-        fastslam_node.data_association = args[1]
-        rospy.loginfo("Received arguments: data_association = %s", args[1])
+    if len(args) == 4:
+        if args[1] == 'known' or args[1] == 'unknown':
+            rospy.loginfo("Received arguments: data_association = %s", args[1])
+            fastslam_node.data_association = args[1]
+        else:
+            rospy.logwarn("Data association argument invalid.")
+            rospy.logwarn("Data association set to known.")
+            fastslam_node.data_association = 'known'
+        if args[2] == 'simple' or args[2] == 'selective':
+            rospy.loginfo("Received arguments: resampler = %s", args[2])
+            fastslam_node.resampler = args[2]
+        else:
+            rospy.logwarn("Resampler argument invalid.")
+            rospy.logwarn("Resampler set to selective.")
+            fastslam_node.resampler = 'selective'
+        if args[3] == 'fastslam1' or args[3] == 'fastslam2':
+            rospy.loginfo("Received arguments: algorithm = %s", args[3])
+            fastslam_node.algorithm = args[3]
+        else:
+            rospy.logwarn("Algorithm argument invalid.")
+            rospy.logwarn("Algorithm set to fastslam1.")
+            fastslam_node.algorithm = 'fastslam1'
     else:
-        rospy.logwarn("Invalid number of arguments. Data association set to known.")
+        rospy.logwarn("Invalid number of arguments.")
+        rospy.logwarn("Data association set to known.")
         fastslam_node.data_association = 'known'
+        rospy.logwarn("Resampler set to selective.")
+        fastslam_node.resampler = 'selective'
+        rospy.logwarn("Algorithm set to fastslam1.")
+        fastslam_node.algorithm = 'fastslam1'
 
     rospy.spin()
     # Terminate the plot process when the main script exits

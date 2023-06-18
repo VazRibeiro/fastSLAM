@@ -23,10 +23,10 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])
+        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])*0.7
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.0005, 0.0],[0.0, 0.0005]])
+        Q = np.array([[0.005, 0.0],[0.0, 0.005]])
         self.measurement_model = MeasurementModel(Q)
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]
@@ -34,7 +34,7 @@ class FastSLAM1():
         self.odom_y = initial_pose[1]
         self.odom_theta = initial_pose[2]
         # Array of N particles
-        self.N_particles = 50
+        self.N_particles = 1500
         # Initial position
         initial_variance = np.array([0,0,0])
         # Create particles
@@ -93,9 +93,10 @@ class FastSLAM1():
         self.timestamp = control[0]
 
 
-    def landmarks_update(self,measurements):
+    def landmarks_update_known(self,measurements,resampler):
         '''
         Update landmark mean and covariance for all landmarks of all particles.
+        Fastslam1.0 known correspondences
         '''
         # Check if measurements are empty
         if len(measurements.transforms) == 0:
@@ -124,24 +125,72 @@ class FastSLAM1():
                     self.measurement_model.initialize_landmark(
                         particle,
                         filtered_measurement,
-                        index)
+                        index
+                        )
             else:
             # elif transform.fiducial_id in self.accepted_landmarks:
                 for particle in self.particles:
                     #print(self.measured_ids)
                     index = np.where(self.measured_ids == transform.fiducial_id)[0][0]
-                    self.measurement_model.landmark_update(
+                    self.measurement_model.landmark_update_known(
                         particle,
                         filtered_measurement,
                         index
-                    )
-
+                        )
         # Normalize all weights
         self.weights_normalization()
-
         # Resample all particles according to the weights
-        self.importance_sampling()
+        self.importance_sampling(resampler)
 
+
+    def landmarks_update_unknown(self,measurements,resampler):
+        '''
+        Update landmark mean and covariance for all landmarks of all particles.
+        Fastslam1.0 unknown correspondences
+        '''
+        # Check if measurements are empty
+        if len(measurements.transforms) == 0:
+            #print("No aruco markers...")
+            return
+        # Check if measurements late
+        if measurements.header.stamp.to_sec() < self.timestamp:
+            print("lost a message...")
+            return
+        # Loop all the measurements in the fiducial transform array
+        for transform in measurements.transforms:
+            x = transform.transform.translation.z
+            y = transform.transform.translation.x
+            bearing = np.arctan2(-y,x)
+            range = np.sqrt(x**2 + y**2)
+            filtered_measurement = np.array([range,bearing,x,-y])
+            # Check if it's a new landmark
+            if ~np.any(np.isin(self.measured_ids,transform.fiducial_id)):
+            # if  (transform.fiducial_id not in self.measured_ids) and\
+            #     (transform.fiducial_id in self.accepted_landmarks):
+                # If it's a new landmark, add it
+                self.measured_ids = np.append(self.measured_ids,[[transform.fiducial_id]],0)
+                for particle in self.particles:
+                    index = len(self.measured_ids)-1
+                    # Initialize mean and covariance for this landmark
+                    self.measurement_model.initialize_landmark(
+                        particle,
+                        filtered_measurement,
+                        index
+                        )
+            else:
+            # elif transform.fiducial_id in self.accepted_landmarks:
+                for particle in self.particles:
+                    #print(self.measured_ids)
+                    index = np.where(self.measured_ids == transform.fiducial_id)[0][0]
+                    self.measurement_model.landmark_update_known(
+                        particle,
+                        filtered_measurement,
+                        index
+                        )
+        # Normalize all weights
+        self.weights_normalization()
+        # Resample all particles according to the weights
+        self.importance_sampling(resampler)
 
     def weights_normalization(self):
         '''
@@ -160,26 +209,50 @@ class FastSLAM1():
             particle.weight /= sum
 
 
-    def importance_sampling(self):
+    def importance_sampling(self,resampler):
         '''
-        Resample all particles through the importance factors.
+        Resampling using 2 possible methods: always resample or selective
+        re-sampling.
         '''
         # Construct weights vector
         weights = []
-        for particle in self.particles:
-            weights.append(particle.weight)
-        # Resample all particles according to importance weights
-        new_indexes = np.random.choice(
-            len(self.particles), 
-            len(self.particles),
-            replace=True, 
-            p=weights
-            )
-        # Update new particles
-        new_particles = []
-        for index in new_indexes:
-            new_particles.append(copy.deepcopy(self.particles[index]))
-        self.particles = new_particles
+        sum = 0.0
+        # method 1
+        if resampler == 'simple':
+            for particle in self.particles:
+                weights.append(particle.weight)
+            # Resample all particles according to importance weights
+            new_indexes = np.random.choice(
+                len(self.particles), 
+                len(self.particles),
+                replace=True, 
+                p=weights
+                )
+            # Update new particles
+            new_particles = []
+            for index in new_indexes:
+                new_particles.append(copy.deepcopy(self.particles[index]))
+            self.particles = new_particles
+        # method 2
+        elif resampler == 'selective':
+            for particle in self.particles:
+                weights.append(particle.weight)
+                sum += (particle.weight)**2
+            n_eff = 1/sum
+            if n_eff<(self.N_particles/2):
+                # Resample all particles according to importance weights
+                new_indexes = np.random.choice(
+                    len(self.particles), 
+                    len(self.particles),
+                    replace=True, 
+                    p=weights
+                    )
+                # Update new particles
+                new_particles = []
+                for index in new_indexes:
+                    new_particles.append(copy.deepcopy(self.particles[index]))
+                self.particles = new_particles
+        
 
 
     def get_predicted_position(self):

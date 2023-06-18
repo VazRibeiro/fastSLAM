@@ -59,7 +59,7 @@ class MeasurementModel():
         return H_m
 
 
-    def landmark_update(self,particle,measurement,index):
+    def landmark_update_known(self,particle,measurement,index):
         '''
         Update landmark mean and covariance using EKF.
         This landmark has to be observed before.
