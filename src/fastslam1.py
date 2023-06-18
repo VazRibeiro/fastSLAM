@@ -23,7 +23,7 @@ class FastSLAM1():
         '''
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])
+        motion_noise = np.array([0.05, 0.05, 0.05, 0.05, 0.07, 0.07])
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
         Q = np.array([[0.0005, 0.0],[0.0, 0.0005]])

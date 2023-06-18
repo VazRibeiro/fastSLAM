@@ -19,6 +19,98 @@ from matplotlib.patches import Ellipse
 import multiprocessing as mp
 
 
+
+
+
+import numpy as np
+from typing import List
+from skimage.measure import LineModelND, ransac
+import matplotlib.pyplot as plt
+
+
+class RansacLineInfo(object):
+    """Helper class to manage the information about the RANSAC line."""
+
+    def __init__(self, inlier_points: np.ndarray, model: LineModelND):
+        self.inliers = inlier_points  # the inliers that were detected by RANSAC algo
+        self.model = model  # The LinearModelND that was a result of RANSAC algo
+
+    @property
+    def unitvector(self):
+        """The unit vector of the model. This is an array of 2 elements (x, y)"""
+        return self.model.params[1]
+
+
+def extract_lines_using_ransac(map_points: np.ndarray, min_samples: int, max_distance: float,
+                               min_inliers_allowed: int, iterations: int) -> List[RansacLineInfo]:
+    results: List[RansacLineInfo] = []
+    starting_points = map_points.copy()
+
+    for index in range(iterations):
+        if len(starting_points) <= min_samples:
+            print("No more points available. Terminating search for RANSAC")
+            break
+
+        model_robust, inliers = ransac(starting_points, LineModelND, min_samples=min_samples,
+                                       residual_threshold=max_distance, max_trials=1000)
+
+        inlier_points = starting_points[inliers]
+        if len(inlier_points) < min_inliers_allowed:
+            print("Not sufficient inliers found %d, threshold=%d, therefore halting" %
+                  (len(inlier_points), min_inliers_allowed))
+            break
+
+        starting_points = np.delete(starting_points, inliers, axis=0)
+        results.append(RansacLineInfo(inlier_points, model_robust))
+        print("Found %d RANSAC lines" % len(results))
+
+    return results
+
+
+def generate_plottable_points_along_line(model: LineModelND, xmin: float, xmax: float, ymin: float,
+                                         ymax: float) -> np.ndarray:
+    """
+    Computes points along the specified line model
+    The visual range is
+    between xmin and xmax along X axis
+        and
+    between ymin and ymax along Y axis
+    return shape is [[x1,y1],[x2,y2]]
+    """
+    unit_vector = model.params[1]
+    slope = abs(unit_vector[1] / unit_vector[0])
+    x_values = None
+    y_values = None
+    if slope > 1:
+        y_values = np.arange(ymin, ymax, 1)
+        x_values = model.predict_x(y_values)
+    else:
+        x_values = np.arange(xmin, xmax, 1)
+        y_values = model.predict_y(x_values)
+
+    np_data_points = np.column_stack((x_values, y_values))
+    return np_data_points
+
+
+def plot_lines_on_map(map_points: np.ndarray, lines: List[RansacLineInfo]):
+    plt.scatter(map_points[:, 0], map_points[:, 1], label='Map Points')
+    for i, line in enumerate(lines):
+        plt.scatter(line.inliers[:, 0], line.inliers[:, 1], label='Inliers {}'.format(i + 1))
+        plottable_points = generate_plottable_points_along_line(line.model, map_points[:, 0].min(),
+                                                                map_points[:, 0].max(), map_points[:, 1].min(),
+                                                                map_points[:, 1].max())
+        plt.plot(plottable_points[:, 0], plottable_points[:, 1], label='Line {}'.format(i + 1))
+
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Lines Detected by RANSAC')
+
+
+
+
+
+
+
 class FastSlamNode:
 
     def __init__(self):
@@ -219,7 +311,21 @@ class FastSlamNode:
                     scale=1, 
                     color='grey', 
                     width=0.005
-                    )                
+                    )
+
+
+                min_samples = 5  # RANSAC parameter - The minimum number of data points to fit a model to.
+                max_distance = 0.3  # RANSAC parameter - The maximum allowed distance for a point to be classified as an inlier.
+                min_inliers_allowed = 6  # Custom parameter - A line is selected only if it has more than these many inliers.
+                iterations = 500  # Number of RANSAC iterations
+
+                # Extract lines using RANSAC
+                lines = extract_lines_using_ransac(mean[0], min_samples, max_distance, min_inliers_allowed, iterations)
+
+                # Plot the lines on the map
+                plot_lines_on_map(mean[0], lines)
+
+
                 # Plot configurations
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
@@ -253,7 +359,7 @@ class FastSlamNode:
         self.fastslam.get_predicted_position()
 
         # Plot results
-        if ((self.main_loop_counter) % 40 == 0):
+        if ((self.main_loop_counter) % 50 == 0):
             # Put the data and termination flag into the queue
             data = {
             'data': self.fastslam.get_plot_data(),
