@@ -8,6 +8,7 @@ plot the results.
 
 import rospy
 import sys
+import os
 import tf.transformations as tf
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -31,7 +32,7 @@ class FastSlamNode:
         self.odometry_flag = False
         self.main_loop_counter = 0
         self.first_odometry_callback = False
-        self.control = [0, 0]
+        self.control = [0, 0, 0, 0, 0]
         self.measurements = FiducialTransformArray()
         self.data_association = 'none'
         self.resampler = 'none'
@@ -114,15 +115,16 @@ class FastSlamNode:
         # Extract linear and angular velocities from the current velocity message
         time = vel.header.stamp
         time = time.to_sec()
+        x = vel.pose.pose.position.x
+        y = vel.pose.pose.position.y
         v = vel.twist.twist.linear.x
         w = vel.twist.twist.angular.z
-        self.control = [time,v,w]
-
+        self.control = [time,v,w,x,y]
+              
     # Aruco markers callback
     def fid_callback(self, fiducial_transforms):
         self.camera_flag = True
         self.measurements = fiducial_transforms
-
 
     def plot_data_process(self,data_queue):
         """
@@ -258,7 +260,7 @@ class FastSlamNode:
                     pass
 
         # Get average position of the particles
-        self.fastslam.get_predicted_position()
+        self.fastslam.get_predicted_position(self.control[3], self.control[4])
 
         # Plot results
         if ((self.main_loop_counter) % 40 == 0):
@@ -275,6 +277,23 @@ class FastSlamNode:
 
 
 def main():
+
+    # Delete output files from previous run
+    current_dir = os.path.abspath(__file__)
+    current_dir = current_dir.rstrip('fastslam_node.py')
+    current_dir = current_dir.rstrip('/src')    
+    current_dir = current_dir.rstrip('/fastSLAM')
+    filename1 = "simulate_data/output/points_predict.txt"
+    filename2 = "simulate_data/output/landmarks_predict.txt"
+    # Specify the file path
+    filename_p = os.path.join(current_dir, filename1)
+    filename_l = os.path.join(current_dir, filename2)
+    # Check if the path is a file (not a directory)
+    if os.path.isfile(filename_p):
+        os.remove(filename_p)
+    if os.path.isfile(filename_l):
+        os.remove(filename_l)
+
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
     # Access the command-line arguments
