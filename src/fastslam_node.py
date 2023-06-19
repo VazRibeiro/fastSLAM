@@ -283,8 +283,8 @@ def main():
     current_dir = current_dir.rstrip('fastslam_node.py')
     current_dir = current_dir.rstrip('/src')    
     current_dir = current_dir.rstrip('/fastSLAM')
-    filename1 = "simulate_data/output/points_predict.txt"
-    filename2 = "simulate_data/output/landmarks_predict.txt"
+    filename1 = "simulate_data_for_fastslam/output/points_predict.txt"
+    filename2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
     # Specify the file path
     filename_p = os.path.join(current_dir, filename1)
     filename_l = os.path.join(current_dir, filename2)

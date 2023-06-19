@@ -267,8 +267,8 @@ class FastSLAM1():
         current_dir = current_dir.rstrip('fastslam1.py')
         current_dir = current_dir.rstrip('/src')
         current_dir = current_dir.rstrip('/fastSLAM')
-        file_path1 = "simulate_data/output/points_predict.txt"
-        file_path2 = "simulate_data/output/landmarks_predict.txt"
+        file_path1 = "simulate_data_for_fastslam/output/points_predict.txt"
+        file_path2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
         # Specify the file path
         file_path1 = os.path.join(current_dir, file_path1)
         file_path2 = os.path.join(current_dir, file_path2)
