@@ -2,8 +2,8 @@
 '''
 Implements and runs the FastSlam1 ROS node which interfaces the 
 ROS configurations, subscribers and publishers with the FastSlam1
-with Known Correspondences algorithm. Runs a second process to 
-plot the results.
+with Known and Unknown Correspondences algorithms. Runs a second 
+process to plot the results.
 '''
 
 import rospy
@@ -163,20 +163,20 @@ class FastSlamNode:
                 plt.scatter(x, y, s=5, c='k', alpha=0.5)
 
                 # Plot mean points and covariance ellipses
-                for i in range(len(mean[0])):
+                for i in range(len(mean)):
                     # Plot mean point
                     plt.scatter(
-                        mean[0][i, 0], 
-                        mean[0][i, 1], 
+                        mean[i, 0], 
+                        mean[i, 1], 
                         c='b', marker='.')
                     # Plot covariance ellipse
-                    eigenvalues, eigenvectors = np.linalg.eig(cov[0][i])
+                    eigenvalues, eigenvectors = np.linalg.eig(cov[i])
                     angle = np.degrees(
                         np.arctan2(eigenvectors[1, 0], 
                         eigenvectors[0, 0])
                         )
                     ellipse = Ellipse(
-                        mean[0][i], 2 * np.sqrt(eigenvalues[0]), 
+                        mean[i], 2 * np.sqrt(eigenvalues[0]), 
                         2 * np.sqrt(eigenvalues[1]), 
                         angle=angle, 
                          fill=True,
@@ -185,8 +185,8 @@ class FastSlamNode:
                     plt.gca().add_patch(ellipse)
                     # Add ID as text near the mean point
                     plt.text(
-                        mean[0][i, 0], 
-                        mean[0][i, 1], 
+                        mean[i, 0], 
+                        mean[i, 1], 
                         str(int(ids[i][0])), 
                         fontsize=10, 
                         ha='center', 
@@ -226,7 +226,7 @@ class FastSlamNode:
                 plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
                 plt.pause(1e-16)
-            #print("plotting time: " + str(timer-previous_timer))
+            print("plotting time: " + str(timer-previous_timer))
         # Terminate the plot process when the loop breaks
         plt.close()
 
@@ -253,8 +253,9 @@ class FastSlamNode:
                     if self.data_association =='known':
                         self.fastslam.landmarks_update_known(self.measurements,self.resampler)
                     elif self.data_association =='unknown':
-                        pass
+                        self.fastslam.landmarks_update_unknown(self.measurements,self.resampler)
                 elif self.algorithm == 'fastlam2':
+                    print('Fastslam2 not implemented!')
                     pass
 
         # Get average position of the particles
@@ -264,13 +265,13 @@ class FastSlamNode:
         if ((self.main_loop_counter) % 40 == 0):
             # Put the data and termination flag into the queue
             data = {
-            'data': self.fastslam.get_plot_data(),
+            'data': self.fastslam.get_plot_data(self.data_association),
             'terminate_flag': False
             }
             self.data_queue.put(data)
             self.main_loop_counter = 0
 
-        #print("Algorithm time: " + str(time.time()-time1))
+        print("Algorithm time: " + str(time.time()-time1))
     ################################################################################
 
 
