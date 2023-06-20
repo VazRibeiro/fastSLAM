@@ -30,3 +30,4 @@ credentials.txt
 # python cache
 *.pyc
 src/test.py
+pioneer3dx.rviz

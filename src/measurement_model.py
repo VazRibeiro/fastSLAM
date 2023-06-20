@@ -59,28 +59,33 @@ class MeasurementModel():
         return H_m
 
 
-    def landmark_update(self,particle,measurement,index):
+    def landmark_update_known(self,particle,measurement,index):
         '''
         Update landmark mean and covariance using EKF.
         This landmark has to be observed before.
         '''
-        # Compute expected measurement
         dx,dy,q =self.compute_expected_measurement(particle,index)
+        range_exp = np.sqrt(q)
+        if np.arctan2(dy, dx)*particle.theta<0 and \
+           abs(np.arctan2(dy, dx) + particle.theta)+abs(particle.theta)>np.pi:
+            bearing_exp = np.arctan2(dy, dx) + particle.theta
+        else:
+            bearing_exp = np.arctan2(dy, dx) - particle.theta
+
         # Get Jacobian wrt landmark state
         H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
         # Compute measurement covariance
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
         # Compute Kalman gain
         K = particle.cov[index].dot(H_m.T).dot(np.linalg.inv(Q))
-
         # Update mean
-        difference = np.array([[measurement[2] - dx],
-                               [measurement[3] - dy]])
+        difference = np.array([[measurement[0] - range_exp],
+                               [measurement[1] - bearing_exp]])
+        #print("id,meas, bear,arc,teta",id,measurement[1],bearing_exp,np.arctan2(dy, dx),particle.theta)
         innovation = K.dot(difference)
         particle.mean[index] += innovation.T[0]
         # Update covariance
         particle.cov[index]=(np.identity(2)-K.dot(H_m)).dot(particle.cov[index])
-
         # Importance factor
         particle.weight =   abs(np.linalg.det(2 * np.pi * Q)) ** (-0.5) *\
                             np.exp(-0.5 * difference.T.dot(np.linalg.inv(Q)).
@@ -89,38 +94,32 @@ class MeasurementModel():
 
 
 
-    def compute_correspondence(self, particle, measurement, index):
+    def match_landmark(self, particle, measurement, index):
         '''
-        Implementation for Fast SLAM 1.0.
-        Compute the likelihood of correspondence for between a measurement and
-        a given landmark.
-        This process is the same as updating a landmark mean with EKF method.
-
-        Input:
-            particle: Particle() object to be updated.
-            measurement: measurement data Z_t.
-                         [timestamp, #landmark, range, bearing]
-            index: the index of the landmark (0 ~ 15).
-        Output:
-            likehood: likelihood of correspondence
+        Compute the likelihood of a match between the measurement and the
+        landmark number index+1.
         '''
-        # Compute expected measurement
-        range_expected, bearing_expected =\
-            self.compute_expected_measurement(particle, index)
+        dx,dy,q =self.compute_expected_measurement(particle,index)
+        range_exp = np.sqrt(q)
+        if np.arctan2(dy, dx)*particle.theta<0 and \
+           abs(np.arctan2(dy, dx) + particle.theta)+abs(particle.theta)>np.pi:
+            bearing_exp = np.arctan2(dy, dx) + particle.theta
+        else:
+            bearing_exp = np.arctan2(dy, dx) - particle.theta
 
         # Get Jacobian wrt landmark state
-        H_m = self.compute_landmark_jacobian(particle, index)
-
+        H_m = self.compute_landmark_jacobian(particle,dx,dy,q)
+        # Compute measurement covariance
         Q = H_m.dot(particle.cov[index]).dot(H_m.T) + self.Q
-        difference = np.array([[measurement[2] - range_expected],
-                               [measurement[3] - bearing_expected]])
+        # Difference between measured and expected
+        difference = np.array([[measurement[0] - range_exp],
+                               [measurement[1] - bearing_exp]])
+        # Importance factor
+        weight =   abs(np.linalg.det(2 * np.pi * Q)) ** (-0.5) *\
+                            np.exp(-0.5 * difference.T.dot(np.linalg.inv(Q)).
+                            dot(difference))[0,0]
 
-        # likelihood of correspondence
-        likelihood = np.linalg.det(2 * np.pi * Q) ** (-0.5) *\
-            np.exp(-0.5 * difference.T.dot(np.linalg.inv(Q)).
-                   dot(difference))[0, 0]
-
-        return likelihood
+        return weight
     
 
 
