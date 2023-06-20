@@ -59,7 +59,6 @@ class FastSLAM1():
         self.measured_ids = np.zeros((0,1))
         self.accepted_landmarks = [33, 32]
         self.iterations = 0
-        self.mean_avg = np.array([[0, 0]])
 
 
     def odometry_update(self, control):
@@ -326,48 +325,20 @@ class FastSLAM1():
         
 
 
-    def get_predicted_position(self, x_truth, y_truth):
+    def save_data(self):
         '''
         Calculate the average position of the particles
         '''
-        current_dir = os.path.abspath(__file__)
-        current_dir = current_dir.rstrip('fastslam1.py')
-        current_dir = current_dir.rstrip('/src')
-        current_dir = current_dir.rstrip('/fastSLAM')
-        file_path1 = "simulate_data_for_fastslam/output/points_predict.txt"
-        file_path2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
-        # Specify the file path
-        file_path1 = os.path.join(current_dir, file_path1)
-        file_path2 = os.path.join(current_dir, file_path2)
-
         x = 0.0
         y = 0.0
         theta = 0.0
-        mean_x = np.zeros(len(self.measured_ids), dtype=np.float64)
-        mean_y = np.zeros(len(self.measured_ids), dtype=np.float64)
-        mean_values = []  # Initialize mean_values list
-
         for particle in self.particles:
-            for index in range(len(self.measured_ids)):
-                if particle.mean.size != 0:
-                    mean_x[int(index)] += particle.mean[int(index)][0]
-                    mean_y[int(index)] += particle.mean[int(index)][1]
-
             x += particle.x
             y += particle.y
             theta += particle.theta
-
         x /= self.N_particles
         y /= self.N_particles
         theta /= self.N_particles
-
-        if particle.mean.size != 0:
-            for index in range(len(self.measured_ids)):
-                mean_x[int(index)] /= self.N_particles
-                mean_y[int(index)] /= self.N_particles
-                mean_values.extend([mean_x[int(index)], mean_y[int(index)],self.measured_ids[index]])
-                self.mean_avg = [mean_x[int(index)], mean_y[int(index)]]
-        
         # If the position changed enough, save the new estimate
         if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1\
         or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
@@ -381,7 +352,35 @@ class FastSLAM1():
                 [[self.odom_x,self.odom_y,self.odom_theta]], 
                 axis=0
                 )
+    
 
+    def write_data_to_files(self,x_truth,y_truth,method):
+        # Extract the weights from the particles to find the best one
+        weights = np.array([particle.weight for particle in self.particles])
+        max_index = np.argmax(weights)
+        # Get the ids of the particle with highest weight
+        if method == 'known':
+            ids = self.measured_ids
+        elif method == 'unknown':
+            ids = self.particles[max_index].measured_ids
+        # Get the mean of the particle with highest weight
+        mean = self.particles[max_index].mean
+        mean_values = []
+        for index in range(len(ids)):
+            mean_values.extend([mean[index,0], mean[index,1],ids[index,0]])
+
+        # Get the correct directory to the simulate_data_for_fastslam
+        # package, where the data will be created in the output directory.
+        current_dir = os.path.abspath(__file__)
+        current_dir = current_dir.rstrip('fastslam1.py')
+        current_dir = current_dir.rstrip('/src')
+        current_dir = current_dir.rstrip('/fastSLAM')
+        file_path1 = "simulate_data_for_fastslam/output/points_predict.txt"
+        file_path2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
+        # Specify the file path
+        file_path1 = os.path.join(current_dir, file_path1)
+        file_path2 = os.path.join(current_dir, file_path2)
+        # Write to the positions file
         with open(file_path1, 'a', newline='') as file:  # Open the file in write mode
             writer = csv.writer(file, delimiter=',')
             # Write the data to the file
@@ -389,13 +388,14 @@ class FastSLAM1():
                 x_truth, y_truth, self.iterations]
             writer.writerow(row)
             self.iterations += 1
-
+        # Write to the landmarks file
         with open(file_path2, 'a', newline='') as file:  # Open the file in write mode
             writer = csv.writer(file, delimiter=',')
             # Write the data to the file
             row = [self.iterations] + mean_values
             writer.writerow(row)
             self.iterations += 1
+
 
     def get_plot_data(self,method):
         '''
@@ -404,17 +404,19 @@ class FastSLAM1():
         # Extract the weights from the particles to find the best one
         weights = np.array([particle.weight for particle in self.particles])
         max_index = np.argmax(weights)
-
+        # Get the data for particles position
         x = [particle.x for particle in self.particles]
         y = [particle.y for particle in self.particles]
+        # Get the ids of the particle with highest weight
         if method == 'known':
             ids = self.measured_ids
         elif method == 'unknown':
             ids = self.particles[max_index].measured_ids
+        # Get the mean and covariance of the particle with highest weight
         mean = self.particles[max_index].mean
         cov = self.particles[max_index].cov
         return self.predicted_position, x, y, ids, mean, cov, self.odometry
-    
+
 
     def check_fov(self,x_fid,y_fid,depth,slope):
         # Current fov at 45º angle

@@ -38,6 +38,7 @@ class FastSlamNode:
         self.data_association = 'none'
         self.resampler = 'none'
         self.rmse = 'none'
+        self.reject_ids = False
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -255,13 +256,23 @@ class FastSlamNode:
                 self.camera_flag  = False
                 # Update landmark estimation
                 if self.data_association =='known':
-                    self.fastslam.landmarks_update_known(self.measurements,self.resampler)
+                    self.fastslam.landmarks_update_known(
+                        self.measurements,
+                        self.resampler
+                        )
                 elif self.data_association =='unknown':
-                    self.fastslam.landmarks_update_unknown(self.measurements,self.resampler)
-
-        # Get average position of the particles
-        self.fastslam.get_predicted_position(self.control[3], self.control[4])
-
+                    self.fastslam.landmarks_update_unknown(
+                        self.measurements,
+                        self.resampler
+                        )
+        # Save current data
+        self.fastslam.save_data()
+        if self.rmse == 'rmse_enabled' and self.data_association!='none':
+            self.fastslam.write_data_to_files(
+                self.control[3], 
+                self.control[4],
+                self.data_association
+                )
         # Plot results
         if ((self.main_loop_counter) % 40 == 0):
             # Put the data and termination flag into the queue
@@ -277,7 +288,6 @@ class FastSlamNode:
 
 
 def main():
-
     # Delete output files from previous run
     current_dir = os.path.abspath(__file__)
     current_dir = current_dir.rstrip('fastslam_node.py')
@@ -303,6 +313,7 @@ def main():
     parser.add_argument('-r', '--rmse', action='store_true', help='Generate data for RMS error.')
     parser.add_argument('-k', '--known', action='store_true', help='Known correspondences.')
     parser.add_argument('-s', '--always_resample', action='store_true', help='Resample at every landmark update.')
+    parser.add_argument('-id', '--reject_ids', action='store_true', help='Ignore Aruco ids from a list.')
     # Parse the command-line arguments
     args = parser.parse_args()
     # Check arguments
@@ -324,7 +335,12 @@ def main():
     else:
         rospy.loginfo("Resample method:  Selective Resampling")
         fastslam_node.resampler = 'selective'
-
+    if args.reject_ids:
+        rospy.loginfo("Ignore ids:       Enabled")
+        fastslam_node.reject_ids = True
+    else:
+        rospy.loginfo("Ignore ids:       Disabled")
+        fastslam_node.reject_ids = False
 
     rospy.spin()
     # Terminate the plot process when the main script exits
