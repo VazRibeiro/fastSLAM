@@ -110,7 +110,7 @@ class FastSLAM1():
             return
         # Check if measurements late
         if measurements.header.stamp.to_sec() < self.timestamp:
-            print("lost a message...")
+            #print("lost a message...")
             return
         # Loop all the measurements in the fiducial transform array
         for transform in measurements.transforms:
@@ -158,7 +158,7 @@ class FastSLAM1():
             return
         # Check if measurements late
         if measurements.header.stamp.to_sec() < self.timestamp:
-            print("lost a message...")
+            #print("lost a message...")
             return
         # For each particle update the landmarks based on the measurement
         for particle in self.particles:
