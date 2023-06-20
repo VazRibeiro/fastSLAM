@@ -385,7 +385,8 @@ class FastSLAM1():
             writer = csv.writer(file, delimiter=',')
             # Write the data to the file
             row = [self.predicted_position[-1, 0], self.predicted_position[-1, 1],
-                x_truth, y_truth, self.iterations]
+                x_truth, y_truth, self.iterations, self.odometry[-1, 0],
+                self.odometry[-1, 1]]
             writer.writerow(row)
             self.iterations += 1
         # Write to the landmarks file

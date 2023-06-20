@@ -229,7 +229,6 @@ class FastSlamNode:
                     width=0.005
                     )                
                 # Plot configurations
-                plt.title('Fast SLAM 1.0 with known correspondences')
                 plt.legend()
                 plt.pause(1e-16)
             #print("plotting time: " + str(timer-previous_timer))
