@@ -90,8 +90,6 @@ class MeasurementModel():
         particle.weight =   abs(np.linalg.det(2 * np.pi * Q)) ** (-0.5) *\
                             np.exp(-0.5 * difference.T.dot(np.linalg.inv(Q)).
                             dot(difference))[0,0]
-        # Increase particle confidence everytime it's seen
-        particle.confidence[index] += 1
 
 
 

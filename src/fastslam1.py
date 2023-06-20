@@ -226,6 +226,8 @@ class FastSLAM1():
                                 filtered_measurement,
                                 most_likely_id
                                 )
+                            # Increase particle confidence everytime it's seen
+                            particle.confidence[most_likely_id] += 1
                         else:
                             # Compute the relative position vector
                             dx = particle.mean[id,0] - particle.x
