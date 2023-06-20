@@ -7,6 +7,8 @@ Wolfram Burgard (Author) and Dieter Fox (Author).
 
 import math
 import numpy as np
+import csv
+import os
 import tf.transformations as tf
 from scipy.spatial.transform import Rotation
 import copy
@@ -56,6 +58,8 @@ class FastSLAM1():
         self.odometry = np.array([[0,0,0]])
         self.measured_ids = np.zeros((0,1))
         self.accepted_landmarks = [33, 32]
+        self.iterations = 0
+        self.mean_avg = np.array([[0, 0]])
 
 
     def odometry_update(self, control):
@@ -320,20 +324,48 @@ class FastSLAM1():
         
 
 
-    def get_predicted_position(self):
+    def get_predicted_position(self, x_truth, y_truth):
         '''
         Calculate the average position of the particles
         '''
+        current_dir = os.path.abspath(__file__)
+        current_dir = current_dir.rstrip('fastslam1.py')
+        current_dir = current_dir.rstrip('/src')
+        current_dir = current_dir.rstrip('/fastSLAM')
+        file_path1 = "simulate_data_for_fastslam/output/points_predict.txt"
+        file_path2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
+        # Specify the file path
+        file_path1 = os.path.join(current_dir, file_path1)
+        file_path2 = os.path.join(current_dir, file_path2)
+
         x = 0.0
         y = 0.0
         theta = 0.0
+        mean_x = np.zeros(len(self.measured_ids), dtype=np.float64)
+        mean_y = np.zeros(len(self.measured_ids), dtype=np.float64)
+        mean_values = []  # Initialize mean_values list
+
         for particle in self.particles:
+            for index in range(len(self.measured_ids)):
+                if particle.mean.size != 0:
+                    mean_x[int(index)] += particle.mean[int(index)][0]
+                    mean_y[int(index)] += particle.mean[int(index)][1]
+
             x += particle.x
             y += particle.y
             theta += particle.theta
+
         x /= self.N_particles
         y /= self.N_particles
         theta /= self.N_particles
+
+        if particle.mean.size != 0:
+            for index in range(len(self.measured_ids)):
+                mean_x[int(index)] /= self.N_particles
+                mean_y[int(index)] /= self.N_particles
+                mean_values.extend([mean_x[int(index)], mean_y[int(index)],self.measured_ids[index]])
+                self.mean_avg = [mean_x[int(index)], mean_y[int(index)]]
+        
         # If the position changed enough, save the new estimate
         if np.linalg.norm(self.predicted_position[-1,0:1] - [x,y]) > 0.1\
         or np.sqrt((self.predicted_position[-1,2] - theta)**2) > 0.08:
@@ -347,7 +379,21 @@ class FastSLAM1():
                 [[self.odom_x,self.odom_y,self.odom_theta]], 
                 axis=0
                 )
-    
+
+        with open(file_path1, 'a', newline='') as file:  # Open the file in write mode
+            writer = csv.writer(file, delimiter=',')
+            # Write the data to the file
+            row = [self.predicted_position[-1, 0], self.predicted_position[-1, 1],
+                x_truth, y_truth, self.iterations]
+            writer.writerow(row)
+            self.iterations += 1
+
+        with open(file_path2, 'a', newline='') as file:  # Open the file in write mode
+            writer = csv.writer(file, delimiter=',')
+            # Write the data to the file
+            row = [self.iterations] + mean_values
+            writer.writerow(row)
+            self.iterations += 1
 
     def get_plot_data(self,method):
         '''
