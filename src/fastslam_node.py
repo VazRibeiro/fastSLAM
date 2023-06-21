@@ -2,12 +2,14 @@
 '''
 Implements and runs the FastSlam1 ROS node which interfaces the 
 ROS configurations, subscribers and publishers with the FastSlam1
-with Known Correspondences algorithm. Runs a second process to 
-plot the results.
+with Known and Unknown Correspondences algorithms. Runs a second 
+process to plot the results.
 '''
 
 import rospy
 import sys
+import argparse
+import os
 import tf.transformations as tf
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -123,9 +125,12 @@ class FastSlamNode:
         self.odometry_flag = False
         self.main_loop_counter = 0
         self.first_odometry_callback = False
-        self.control = [0, 0]
+        self.control = [0, 0, 0, 0, 0]
         self.measurements = FiducialTransformArray()
         self.data_association = 'none'
+        self.resampler = 'none'
+        self.rmse = 'none'
+        self.reject_ids = False
         
         # Initialize the ROS node
         rospy.init_node('fastslam_node')
@@ -158,8 +163,8 @@ class FastSlamNode:
         Load the parameters from the configuration server (ROS)
         """
         # Node frequency of operation
-        self.node_frequency = rospy.get_param('node_frequency', 100)
-        rospy.loginfo('Node Frequency: %s', self.node_frequency)
+        self.node_frequency = rospy.get_param('node_frequency', 50)
+        rospy.loginfo('Node Frequency:   %s', self.node_frequency)
 
 
     def initialize_subscribers(self):
@@ -204,15 +209,18 @@ class FastSlamNode:
         # Extract linear and angular velocities from the current velocity message
         time = vel.header.stamp
         time = time.to_sec()
+        # x and y are only used for rms error purposes
+        x = vel.pose.pose.position.x
+        y = vel.pose.pose.position.y
+        # v and w are the velocities used for the motion model
         v = vel.twist.twist.linear.x
         w = vel.twist.twist.angular.z
-        self.control = [time,v,w]
-
+        self.control = [time,v,w,x,y]
+              
     # Aruco markers callback
     def fid_callback(self, fiducial_transforms):
         self.camera_flag = True
         self.measurements = fiducial_transforms
-
 
     def plot_data_process(self,data_queue):
         """
@@ -240,34 +248,51 @@ class FastSlamNode:
                     predicted_position[:, 0], 
                     predicted_position[:, 1],
                     'r', 
-                    label="Robot State Estimate"
+                    label="Pose Estimate"
                     )
                 #Plot Odometry estimate
                 plt.plot(
                     odometry[:, 0], 
                     odometry[:, 1],
                     'orange', 
-                    label="Odometry estimate"
+                    label="Odometry"
                     )         
                 # Plot particles
                 plt.scatter(x, y, s=5, c='k', alpha=0.5)
 
                 # Plot mean points and covariance ellipses
-                for i in range(len(mean[0])):
-                    # Plot mean point
-                    plt.scatter(
-                        mean[0][i, 0], 
-                        mean[0][i, 1], 
-                        c='b', marker='.')
+                for i in range(len(mean)):
+                    if i==0:
+                       # Plot mean point
+                        plt.scatter(
+                            mean[i, 0], 
+                            mean[i, 1], 
+                            c='b', marker='.')
+                    else:
+                        # Plot mean point
+                        plt.scatter(
+                            mean[i, 0], 
+                            mean[i, 1], 
+                            c='b', marker='.')
                     # Plot covariance ellipse
-                    eigenvalues, eigenvectors = np.linalg.eig(cov[0][i])
+                    eigenvalues, eigenvectors = np.linalg.eig(cov[i])
                     angle = np.degrees(
                         np.arctan2(eigenvectors[1, 0], 
                         eigenvectors[0, 0])
                         )
-                    ellipse = Ellipse(
-                        mean[0][i], 2 * np.sqrt(eigenvalues[0]), 
-                        2 * np.sqrt(eigenvalues[1]), 
+                    if i == 0:
+                        ellipse = Ellipse(
+                            mean[i], 2 * np.sqrt(5.991*eigenvalues[0]), 
+                            2 * np.sqrt(5.991*eigenvalues[1]), 
+                            angle=angle, 
+                            fill=True,
+                            alpha=0.4,
+                            label = "95% Confidence"
+                            )
+                    else:
+                        ellipse = Ellipse(
+                        mean[i], 2 * np.sqrt(5.991*eigenvalues[0]), 
+                        2 * np.sqrt(5.991*eigenvalues[1]), 
                         angle=angle, 
                          fill=True,
                          alpha=0.4
@@ -275,8 +300,8 @@ class FastSlamNode:
                     plt.gca().add_patch(ellipse)
                     # Add ID as text near the mean point
                     plt.text(
-                        mean[0][i, 0], 
-                        mean[0][i, 1], 
+                        mean[i, 0], 
+                        mean[i, 1], 
                         str(int(ids[i][0])), 
                         fontsize=10, 
                         ha='center', 
@@ -327,8 +352,7 @@ class FastSlamNode:
 
 
                 # Plot configurations
-                plt.title('Fast SLAM 1.0 with known correspondences')
-                plt.legend()
+                plt.legend(loc='lower left')
                 plt.pause(1e-16)
             #print("plotting time: " + str(timer-previous_timer))
         # Terminate the plot process when the loop breaks
@@ -353,16 +377,29 @@ class FastSlamNode:
             if self.camera_flag:
                 self.camera_flag  = False
                 # Update landmark estimation
-                self.fastslam.landmarks_update(self.measurements)
-        
-        # Get average position of the particles
-        self.fastslam.get_predicted_position()
-
+                if self.data_association =='known':
+                    self.fastslam.landmarks_update_known(
+                        self.measurements,
+                        self.resampler
+                        )
+                elif self.data_association =='unknown':
+                    self.fastslam.landmarks_update_unknown(
+                        self.measurements,
+                        self.resampler
+                        )
+        # Save current data
+        self.fastslam.save_data()
+        if self.rmse == 'rmse_enabled' and self.data_association!='none':
+            self.fastslam.write_data_to_files(
+                self.control[3], 
+                self.control[4],
+                self.data_association
+                )
         # Plot results
         if ((self.main_loop_counter) % 50 == 0):
             # Put the data and termination flag into the queue
             data = {
-            'data': self.fastslam.get_plot_data(),
+            'data': self.fastslam.get_plot_data(self.data_association),
             'terminate_flag': False
             }
             self.data_queue.put(data)
@@ -373,17 +410,59 @@ class FastSlamNode:
 
 
 def main():
+    # Delete output files from previous run
+    current_dir = os.path.abspath(__file__)
+    current_dir = current_dir.rstrip('fastslam_node.py')
+    current_dir = current_dir.rstrip('/src')    
+    current_dir = current_dir.rstrip('/fastSLAM')
+    filename1 = "simulate_data_for_fastslam/output/points_predict.txt"
+    filename2 = "simulate_data_for_fastslam/output/landmarks_predict.txt"
+    # Specify the file path
+    filename_p = os.path.join(current_dir, filename1)
+    filename_l = os.path.join(current_dir, filename2)
+    # Check if the path is a file (not a directory)
+    if os.path.isfile(filename_p):
+        os.remove(filename_p)
+    if os.path.isfile(filename_l):
+        os.remove(filename_l)
+
     # Create an instance of the FastSlamNode class
     fastslam_node = FastSlamNode()
-    # Access the command-line arguments
-    args = rospy.myargv(argv=sys.argv)
-    # Check if the required number of arguments is passed
-    if len(args) == 2:
-        fastslam_node.data_association = args[1]
-        rospy.loginfo("Received arguments: data_association = %s", args[1])
+
+    # Create an argument parser
+    parser = argparse.ArgumentParser(description='FastSLAM Node')
+    # Add arguments
+    parser.add_argument('-r', '--rmse', action='store_true', help='Generate data for RMS error.')
+    parser.add_argument('-k', '--known', action='store_true', help='Known correspondences.')
+    parser.add_argument('-s', '--always_resample', action='store_true', help='Resample at every landmark update.')
+    parser.add_argument('-id', '--reject_ids', action='store_true', help='Ignore Aruco ids from a list.')
+    # Parse the command-line arguments
+    args = parser.parse_args()
+    # Check arguments
+    if args.rmse:
+        rospy.loginfo("RMS error:        Enabled")
+        fastslam_node.rmse = 'rmse_enabled'
     else:
-        rospy.logwarn("Invalid number of arguments. Data association set to known.")
+        rospy.loginfo("RMS error:        Disabled")
+        fastslam_node.rmse = 'rmse_disabled'
+    if args.known:
+        rospy.loginfo("Data association: Known")
         fastslam_node.data_association = 'known'
+    else:
+        rospy.loginfo("Data association: Unknown")
+        fastslam_node.data_association = 'unknown'
+    if args.always_resample:
+        rospy.loginfo("Resample method:  Every iteration")
+        fastslam_node.resampler = 'simple'
+    else:
+        rospy.loginfo("Resample method:  Selective Resampling")
+        fastslam_node.resampler = 'selective'
+    if args.reject_ids:
+        rospy.loginfo("Ignore ids:       Enabled")
+        fastslam_node.reject_ids = True
+    else:
+        rospy.loginfo("Ignore ids:       Disabled")
+        fastslam_node.reject_ids = False
 
     rospy.spin()
     # Terminate the plot process when the main script exits
