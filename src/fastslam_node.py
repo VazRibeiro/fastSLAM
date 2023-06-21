@@ -156,34 +156,51 @@ class FastSlamNode:
                     predicted_position[:, 0], 
                     predicted_position[:, 1],
                     'r', 
-                    label="Robot State Estimate"
+                    label="Pose Estimate"
                     )
                 #Plot Odometry estimate
                 plt.plot(
                     odometry[:, 0], 
                     odometry[:, 1],
                     'orange', 
-                    label="Odometry estimate"
+                    label="Odometry"
                     )         
                 # Plot particles
                 plt.scatter(x, y, s=5, c='k', alpha=0.5)
 
                 # Plot mean points and covariance ellipses
                 for i in range(len(mean)):
-                    # Plot mean point
-                    plt.scatter(
-                        mean[i, 0], 
-                        mean[i, 1], 
-                        c='b', marker='.')
+                    if i==0:
+                       # Plot mean point
+                        plt.scatter(
+                            mean[i, 0], 
+                            mean[i, 1], 
+                            c='b', marker='.', label="Landmark")
+                    else:
+                        # Plot mean point
+                        plt.scatter(
+                            mean[i, 0], 
+                            mean[i, 1], 
+                            c='b', marker='.')
                     # Plot covariance ellipse
                     eigenvalues, eigenvectors = np.linalg.eig(cov[i])
                     angle = np.degrees(
                         np.arctan2(eigenvectors[1, 0], 
                         eigenvectors[0, 0])
                         )
-                    ellipse = Ellipse(
-                        mean[i], 2 * np.sqrt(eigenvalues[0]), 
-                        2 * np.sqrt(eigenvalues[1]), 
+                    if i == 0:
+                        ellipse = Ellipse(
+                            mean[i], 0.0005*2 * np.sqrt(5.991*eigenvalues[0]), 
+                            0.0005*2 * np.sqrt(5.991*eigenvalues[1]), 
+                            angle=angle, 
+                            fill=True,
+                            alpha=0.4,
+                            label = "95% Confidence \n(x5 scale)"
+                            )
+                    else:
+                        ellipse = Ellipse(
+                        mean[i], 2 * np.sqrt(5.991*eigenvalues[0]), 
+                        2 * np.sqrt(5.991*eigenvalues[1]), 
                         angle=angle, 
                          fill=True,
                          alpha=0.4
@@ -229,7 +246,7 @@ class FastSlamNode:
                     width=0.005
                     )                
                 # Plot configurations
-                plt.legend()
+                plt.legend(loc='lower left')
                 plt.pause(1e-16)
             #print("plotting time: " + str(timer-previous_timer))
         # Terminate the plot process when the loop breaks
