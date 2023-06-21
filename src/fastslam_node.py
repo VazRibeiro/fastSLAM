@@ -345,10 +345,10 @@ class FastSlamNode:
                 iterations = 500  # Number of RANSAC iterations
 
                 # Extract lines using RANSAC
-                lines = extract_lines_using_ransac(mean[0], min_samples, max_distance, min_inliers_allowed, iterations)
+                lines = extract_lines_using_ransac(mean, min_samples, max_distance, min_inliers_allowed, iterations)
 
                 # Plot the lines on the map
-                plot_lines_on_map(mean[0], lines)
+                plot_lines_on_map(mean, lines)
 
 
                 # Plot configurations
