@@ -71,7 +71,7 @@ class FastSlamNode:
         Load the parameters from the configuration server (ROS)
         """
         # Node frequency of operation
-        self.node_frequency = rospy.get_param('node_frequency', 100)
+        self.node_frequency = rospy.get_param('node_frequency', 50)
         rospy.loginfo('Node Frequency:   %s', self.node_frequency)
 
 
@@ -175,7 +175,7 @@ class FastSlamNode:
                         plt.scatter(
                             mean[i, 0], 
                             mean[i, 1], 
-                            c='b', marker='.', label="Landmark")
+                            c='b', marker='.')
                     else:
                         # Plot mean point
                         plt.scatter(
@@ -190,12 +190,12 @@ class FastSlamNode:
                         )
                     if i == 0:
                         ellipse = Ellipse(
-                            mean[i], 0.0005*2 * np.sqrt(5.991*eigenvalues[0]), 
-                            0.0005*2 * np.sqrt(5.991*eigenvalues[1]), 
+                            mean[i], 2 * np.sqrt(5.991*eigenvalues[0]), 
+                            2 * np.sqrt(5.991*eigenvalues[1]), 
                             angle=angle, 
                             fill=True,
                             alpha=0.4,
-                            label = "95% Confidence \n(x5 scale)"
+                            label = "95% Confidence"
                             )
                     else:
                         ellipse = Ellipse(

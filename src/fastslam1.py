@@ -28,10 +28,10 @@ class FastSLAM1():
         self.slope = 1.5   # 30 degree aperture
         # Initialize Motion Model object
         # [alpha1 alpha2 alpha3 alpha4 alpha5 alpha6]
-        motion_noise = np.array([0.1, 0.1, 0.1, 0.1, 0.2, 0.2])*0.7
+        motion_noise = np.array([0.1, 0.2, 0.1, 0.2, 0.2, 0.2])*0.7
         self.motion_model = MotionModel(motion_noise)
         # Initialize Measurement Model object
-        Q = np.array([[0.005, 0.0],[0.0, 0.005]])
+        Q = np.array([[0.05, 0.0],[0.0, 0.05]])
         self.measurement_model = MeasurementModel(Q)
         # Initial Pose [ x, y, zAxis_rotation]
         initial_pose  = [0,0,0]
